@@ -2,7 +2,8 @@
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cache_dir="${ARLINUX_LINUX_CACHE:-/var/cache/arlinux/glibc}"
+cache_root="${ARLINUX_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/arlinux}"
+cache_dir="${ARLINUX_LINUX_CACHE:-$cache_root/glibc}"
 glibc_version="${BIONICX_GLIBC_VERSION:-2.41}"
 recipe="$repo_dir/runtime/glibc/$glibc_version"
 test -f "$recipe/recipe.env" || { echo "missing glibc recipe: $glibc_version" >&2; exit 2; }

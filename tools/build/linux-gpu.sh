@@ -3,10 +3,11 @@ set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 jobs="${ARLINUX_JOBS:-$(nproc)}"
+cache_root="${ARLINUX_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/arlinux}"
 mesa_install="$repo/build/linux/mesa"
 hybris_stage="$repo/build/linux/libhybris"
 mesa_revision="$(git -C "$repo/third_party/mesa" rev-parse HEAD)"
-mesa_cache="/var/cache/arlinux/mesa-$mesa_revision"
+mesa_cache="$cache_root/mesa-$mesa_revision"
 mesa_source="$mesa_cache/source"
 mesa_build="$mesa_cache/build"
 gpu_id="$({

@@ -1,2 +1,3 @@
-anlabwc is a labwc fork (https://github.com/labwc/labwc), GPL-2.0-only.
-Arlinux dlopens libanlabwc.so for the display path.
+Arlinux rootfs pins third-party sources as Git submodules. Those projects keep
+their upstream copyright notices and licenses; generated bundles must preserve
+the notices required by the components they contain.

@@ -1,26 +1,17 @@
 #!/usr/bin/env bash
-# Build every Linux-side APK input. This is the only script invoked through WSL.
+# Build the shared runtime and selected distribution bundles on Linux.
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo"
+export ARLINUX_CACHE_DIR="${ARLINUX_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/arlinux}"
 rebuild=false
 if [[ "${1:-}" == --rebuild ]]; then rebuild=true; shift; fi
 products=("$@")
 [[ ${#products[@]} -gt 0 ]] || products=(debian arch omarchy)
 gpu_inputs="$(git submodule status third_party/mesa third_party/libhybris third_party/android-headers)"
 
-required=(aarch64-linux-gnu-gcc aarch64-linux-gnu-g++ curl debootstrap file git jq
-          make meson ninja patchelf python3 readelf sha256sum tar wayland-scanner zstd)
-missing=()
-for command in "${required[@]}"; do
-    command -v "$command" >/dev/null || missing+=("$command")
-done
-if [[ ${#missing[@]} -gt 0 ]]; then
-    printf 'Missing WSL build tools: %s\n' "${missing[*]}" >&2
-    printf 'Run ./build.ps1 doctor for the package list.\n' >&2
-    exit 2
-fi
+./tools/build/doctor.sh --quiet
 
 input_id() {
     local product="$1"
@@ -106,7 +97,7 @@ for product in "${pending[@]}"; do
 done
 
 echo '== Product root filesystems =='
-stage="${ARLINUX_PRODUCT_STAGE:-/var/cache/arlinux/products}"; mkdir -p "$stage"
+stage="${ARLINUX_PRODUCT_STAGE:-$ARLINUX_CACHE_DIR/products}"; mkdir -p "$stage"
 platform_libs=(libwayland-client.so.0 libwayland-server.so.0 libwayland-egl.so.1
   libX11-xcb.so.1 libxcb-glx.so.0 libxcb-dri3.so.0 libxcb-present.so.0
   libxcb-xfixes.so.0 libxcb-sync.so.1 libxcb-randr.so.0 libxcb-shm.so.0

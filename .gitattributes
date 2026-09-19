@@ -1,4 +1,4 @@
-# Normalize every detected text file to LF on every platform.
+# Keep repository text normalized to LF.
 * text=auto eol=lf
 
 # Patch context preserves upstream indentation and blank context lines.
@@ -6,11 +6,7 @@
 /.gitignore text eol=lf
 /.gitmodules text eol=lf
 
-# Keep cross-platform scripts executable by Bash after a Windows checkout.
 *.sh text eol=lf
 *.env text eol=lf
 *.py text eol=lf
-*.ps1 text eol=lf
 build.sh text eol=lf
-toolchain.json text eol=lf
-android/gradlew text eol=lf

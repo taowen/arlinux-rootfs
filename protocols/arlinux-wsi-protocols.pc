@@ -1,0 +1,6 @@
+pkgdatadir=${pcfiledir}
+
+Name: arlinux-wsi-protocols
+Description: Shared Arlinux Android buffer transport protocols
+Version: 0.4
+Cflags: -I${pkgdatadir}/include

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/taowen/arlinux/schemas/profile.schema.json",
+  "title": "Arlinux application profile",
+  "description": "Schema 3 launch config. Guest ELFs keep Debian PT_INTERP; glibc_exec starts overlay ld.so (explicit-loader). Profiles must not set mode/loader/libraryPath.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "launch"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "schemaVersion": {"const": 3},
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
+    "name": {"type": "string", "minLength": 1},
+    "display": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dpi": {"type": "integer", "minimum": 72, "maximum": 400},
+        "socket": {"enum": ["abstract", "filesystem"]}
+      }
+    },
+    "hostServices": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"enum": ["dbus", "pulseaudio", "vulkan", "cups"]}
+    },
+    "launch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executable"],
+      "properties": {
+        "executable": {"type": "string", "minLength": 1},
+        "workingDirectory": {"type": "string", "minLength": 1},
+        "argv0": {"type": "string"},
+        "diagnoseSignals": {"type": "boolean"},
+        "debugStop": {"type": "boolean"},
+        "arguments": {"type": "array", "items": {"type": "string"}},
+        "environment": {
+          "type": "object",
+          "propertyNames": {"pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+          "additionalProperties": {"type": "string"}
+        }
+      }
+    }
+  }
+}

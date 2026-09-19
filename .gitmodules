@@ -1,0 +1,20 @@
+[submodule "distributions/debian"]
+	path = distributions/debian
+	url = https://github.com/taowen/arlinux-debian.git
+[submodule "distributions/arch"]
+	path = distributions/arch
+	url = https://github.com/taowen/arlinux-arch.git
+[submodule "distributions/omarchy"]
+	path = distributions/omarchy
+	url = https://github.com/taowen/arlinux-omarchy.git
+[submodule "third_party/libhybris"]
+	path = third_party/libhybris
+	url = https://github.com/taowen/libhybris.git
+	branch = arlinux
+[submodule "third_party/android-headers"]
+	path = third_party/android-headers
+	url = https://github.com/Halium/android-headers.git
+[submodule "third_party/mesa"]
+	url = https://github.com/taowen/mesa.git
+	branch = arlinux-official-base
+	path = third_party/mesa

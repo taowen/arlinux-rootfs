@@ -1,0 +1,80 @@
+Backport the Android group member pointer fix from glibc-packages commit
+fd2ae25e04f3ea26d6c7b4678020814889331d86.  The newer complete recipe targets
+a newer glibc source layout and cannot be applied to BionicX's fixed 2.41 ABI.
+
+BionicX also has two explicit identity namespaces.  Normal application
+processes retain the Android fallback for the real app uid/gid.  A virtual
+root transaction uses only the Debian rootfs passwd/group databases, otherwise
+Android's low-id fallback occupies every Debian system uid/gid from 100-999 and
+adduser cannot allocate package accounts.
+
+diff --git a/nss/android_passwd_group.c b/nss/android_passwd_group.c
+--- a/nss/android_passwd_group.c
++++ b/nss/android_passwd_group.c
+@@ -4,11 +4,17 @@
+ */
+ 
+ #include <stdio.h>
++#include <stdlib.h>
+ #include <string.h>
+ #include <ctype.h>
+ #include "android_ids.h"
+ #include "android_passwd_group.h"
+ 
++static int use_linux_identity_namespace(void) {
++	const char *value = getenv("BIONICX_VIRTUAL_ROOT");
++	return value != NULL && !strcmp(value, "1");
++}
++
+ struct android_id_info * find_android_id_info_by_id(unsigned id) {
+ 	for (size_t n = 0; n < android_id_count; ++n)
+ 		if (android_ids[n].aid == id)
+@@ -202,7 +208,7 @@ struct group * get_group_android(const char* name, gid_t gid) {
+ 	res.gr_name = (char *)name;
+ 	res.gr_passwd = NULL;
+ 	res.gr_gid = gid;
+-	res.gr_mem = *(char **[2]){(char **)name, NULL};
++	res.gr_mem = *(char **[2]){&res.gr_name, NULL};
+ 
+ 	return &res;
+ }
+@@ -210,6 +216,9 @@ struct group * get_group_android(const char* name, gid_t gid) {
+ struct passwd * getpwuid_android(uid_t uid) {
+ 	char* name_res = malloc(64);
+ 
++	if (use_linux_identity_namespace())
++		return NULL;
++
+ 	if (is_oem_id_android(uid))
+ 		sprintf(name_res, "oem_%u", uid);
+ 	else {
+@@ -226,6 +235,9 @@ struct passwd * getpwuid_android(uid_t uid) {
+ struct group * getgrgid_android(gid_t gid) {
+ 	char* name_res = malloc(64);
+ 
++	if (use_linux_identity_namespace())
++		return NULL;
++
+ 	if (is_oem_id_android(gid))
+ 		sprintf(name_res, "oem_%u", gid);
+ 	else {
+@@ -244,6 +256,9 @@ struct passwd * getpwnam_android(const char* name) {
+ 	uid_t uid;
+ 	struct android_id_info* info;
+ 
++	if (use_linux_identity_namespace())
++		return NULL;
++
+ 	uid = app_id_from_name_android(name, 0);
+ 	if (uid != 0)
+ 		return get_passwd_android(name, uid);
+@@ -264,6 +279,9 @@ struct group * getgrnam_android(const char* name) {
+ 	gid_t gid;
+ 	struct android_id_info* info;
+ 
++	if (use_linux_identity_namespace())
++		return NULL;
++
+ 	gid = app_id_from_name_android(name, 1);
+ 	if (gid != 0)
+ 		return get_group_android(name, gid);

@@ -1,0 +1,1 @@
+Copied from bionicx/native/runtime for glibc FHS remap (/tmp, /usr, /etc).

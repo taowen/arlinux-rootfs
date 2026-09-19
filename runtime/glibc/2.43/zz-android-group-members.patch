@@ -1,0 +1,46 @@
+--- a/nss/android_passwd_group.c
++++ b/nss/android_passwd_group.c
+@@ -9,6 +9,11 @@
+ #include <ctype.h>
+ #include "android_ids.h"
+ #include "android_passwd_group.h"
++
++static int use_linux_identity_namespace(void) {
++    const char *value = getenv("BIONICX_VIRTUAL_ROOT");
++    return value != NULL && !strcmp(value, "1");
++}
+ 
+ struct android_id_info * find_android_id_info_by_id(unsigned id) {
+ 	for (size_t n = 0; n < android_id_count; ++n)
+@@ -209,6 +214,7 @@
+ }
+ 
+ struct passwd * getpwuid_android(uid_t uid) {
++	if (use_linux_identity_namespace()) return NULL;
+ 	char* name_res = malloc(64);
+ 
+ 	if (is_oem_id_android(uid))
+@@ -225,6 +231,7 @@
+ }
+ 
+ struct group * getgrgid_android(gid_t gid) {
++	if (use_linux_identity_namespace()) return NULL;
+ 	char* name_res = malloc(64);
+ 
+ 	if (is_oem_id_android(gid))
+@@ -241,6 +248,7 @@
+ }
+ 
+ struct passwd * getpwnam_android(const char* name) {
++	if (use_linux_identity_namespace()) return NULL;
+ 	uid_t uid;
+ 	struct android_id_info* info;
+ 
+@@ -260,6 +268,7 @@
+ }
+ 
+ struct group * getgrnam_android(const char* name) {
++	if (use_linux_identity_namespace()) return NULL;
+ 	gid_t gid;
+ 	struct android_id_info* info;
+ 

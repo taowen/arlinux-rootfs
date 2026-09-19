@@ -1,0 +1,16 @@
+/.gradle/
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/local.properties
+/build/
+/out/
+*.apk
+*.iml
+.idea/
+.cxx/
+android/app/.cxx/
+**/.DS_Store
+
+__pycache__/
+/.arlinux.env

@@ -1,0 +1,47 @@
+{
+  "$schema": "../schemas/profile.schema.json",
+  "schemaVersion": 3,
+  "id": "xterm",
+  "name": "XTerm",
+  "display": {
+    "dpi": 144,
+    "socket": "filesystem"
+  },
+  "launch": {
+    "executable": "${RUNTIME}/usr/bin/dbus-run-session",
+    "workingDirectory": "${HOME}",
+    "arguments": [
+      "--",
+      "${RUNTIME}/usr/lib/arlinux/accessibility-session.sh",
+      "${RUNTIME}/usr/bin/xterm",
+      "-ut",
+      "-u8",
+      "-fa",
+      "DejaVu Sans Mono",
+      "-fs",
+      "18",
+      "-geometry",
+      "80x24+40+40",
+      "-title",
+      "Arlinux",
+      "-e",
+      "${RUNTIME}/bin/bash",
+      "-i"
+    ],
+    "environment": {
+      "DISPLAY": "${DISPLAY}",
+      "HOME": "${HOME}",
+      "TMPDIR": "${FILES}/runtime",
+      "XDG_RUNTIME_DIR": "${FILES}/runtime",
+      "XKB_CONFIG_ROOT": "${FILES}/xkb",
+      "GDK_BACKEND": "x11",
+      "XDG_DATA_DIRS": "${RUNTIME}/usr/share",
+      "QT_QPA_PLATFORM": "xcb",
+      "SHELL": "${RUNTIME}/bin/bash",
+      "TERM": "xterm-256color",
+      "PATH": "${RUNTIME}/usr/sbin:${RUNTIME}/usr/bin:${RUNTIME}/sbin:${RUNTIME}/bin:/product/bin:/system/bin",
+      "LANG": "C.UTF-8",
+      "LC_ALL": "C.UTF-8"
+    }
+  }
+}

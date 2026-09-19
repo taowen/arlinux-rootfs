@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+# Build every Linux-side APK input. This is the only script invoked through WSL.
+set -euo pipefail
+
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$repo"
+rebuild=false
+if [[ "${1:-}" == --rebuild ]]; then rebuild=true; shift; fi
+products=("$@")
+[[ ${#products[@]} -gt 0 ]] || products=(debian arch omarchy)
+gpu_inputs="$(git submodule status third_party/mesa third_party/libhybris third_party/android-headers)"
+
+required=(aarch64-linux-gnu-gcc aarch64-linux-gnu-g++ curl debootstrap file git jq
+          make meson ninja patchelf python3 readelf sha256sum tar wayland-scanner zstd)
+missing=()
+for command in "${required[@]}"; do
+    command -v "$command" >/dev/null || missing+=("$command")
+done
+if [[ ${#missing[@]} -gt 0 ]]; then
+    printf 'Missing WSL build tools: %s\n' "${missing[*]}" >&2
+    printf 'Run ./build.ps1 doctor for the package list.\n' >&2
+    exit 2
+fi
+
+input_id() {
+    local product="$1"
+    {
+        git ls-files -s native/bionicx-runtime runtime protocols tools/build tools/arlinux-app-data
+        git diff --binary -- native/bionicx-runtime runtime protocols tools/build tools/arlinux-app-data
+        git ls-files --others --exclude-standard -z -- \
+            native/bionicx-runtime runtime protocols tools/build tools/arlinux-app-data \
+            | sort -z | xargs -0 -r sha256sum
+        git -C "distributions/$product" ls-files -s guest native tools \
+            product.json profile.json rootfs.lock.json
+        git -C "distributions/$product" diff --binary -- guest native tools \
+            product.json profile.json rootfs.lock.json
+        (cd "distributions/$product" &&
+            git ls-files --others --exclude-standard -z -- \
+                guest native tools product.json profile.json rootfs.lock.json \
+                | sort -z | xargs -0 -r sha256sum)
+        printf '%s\n' "$gpu_inputs"
+        [[ "$product" == omarchy ]] && git -C distributions/omarchy submodule status
+        true
+    } | sha256sum | cut -d' ' -f1
+}
+
+pending=()
+declare -A ids
+for product in "${products[@]}"; do
+    [[ -f "distributions/$product/product.json" ]] || { echo "Unknown product: $product" >&2; exit 2; }
+    assets="distributions/$product/build/assets"
+    ids[$product]="$(input_id "$product")"
+    if [[ "$rebuild" == true || ! -s "$assets/rootfs.tar.zst" || ! -s "$assets/gpu-qualcomm.tar.zst" \
+          || "$(cat "$assets/.inputs.sha256" 2>/dev/null || true)" != "${ids[$product]}" ]]; then
+        pending+=("$product")
+    else
+        echo "OK assets  $product (cached)"
+    fi
+done
+[[ ${#pending[@]} -gt 0 ]] || exit 0
+
+echo '== Linux runtime and examples =='
+runtime_sources=(
+  native/bionicx-runtime/android-kernel.c native/bionicx-runtime/dns.c
+  native/bionicx-runtime/fhs-path.c native/bionicx-runtime/fhs-env.c
+  native/bionicx-runtime/fhs-exec.c native/bionicx-runtime/fhs-fork.c
+  native/bionicx-runtime/fhs-pty.c native/bionicx-runtime/fhs-metadata.c
+  native/bionicx-runtime/identity.c native/bionicx-runtime/namespace.c
+  native/bionicx-runtime/timerfd-emu.c native/bionicx-runtime/waitid-emu.c
+  native/bionicx-runtime/sysv-semaphore.c native/bionicx-runtime/sysv-shm.c)
+for product in "${pending[@]}"; do
+    output="build/linux/runtime/$product"; mkdir -p "$output"
+    aarch64-linux-gnu-gcc -shared -fPIC -O2 -Wall -Wextra -Werror \
+      -Wno-error=unused-result -Wno-error=nonnull-compare \
+      -DBIONICX_GLIBC_INTERPOSE -I"distributions/$product/native" \
+      "${runtime_sources[@]}" -o "$output/libbionicx-runtime.so" \
+      -Wl,-z,now -ldl -pthread -Wl,--version-script=native/bionicx-runtime/glibc-interpose.map
+    aarch64-linux-gnu-gcc -O2 -Wall -Wextra -Werror native/bionicx-runtime/sudo.c -o "$output/sudo"
+done
+teapot=build/linux/teapot; mkdir -p "$teapot"
+xml=/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml
+wayland-scanner client-header "$xml" "$teapot/xdg-shell-client-protocol.h"
+wayland-scanner private-code "$xml" "$teapot/xdg-shell-protocol.c"
+aarch64-linux-gnu-gcc -O2 -Wall -Wextra -Werror -idirafter /usr/include \
+  examples/teapot/teapot-glx.c examples/teapot-common/utah_teapot.c \
+  examples/teapot-common/teapot_gate.c -Iexamples/teapot-common -lm -lX11 -lGL -o "$teapot/teapot-glx"
+aarch64-linux-gnu-gcc -O2 -Wall -Wextra -Werror -Wno-unused-parameter -idirafter /usr/include \
+  examples/teapot/teapot-egl.c examples/teapot-common/utah_teapot.c \
+  examples/teapot-common/teapot_gate.c "$teapot/xdg-shell-protocol.c" \
+  -Iexamples/teapot-common -I"$teapot" -lm -lwayland-client -lwayland-egl -lEGL -lGLESv2 \
+  -o "$teapot/teapot-egl"
+
+echo '== Linux GPU stack =='
+"$repo/tools/build/linux-gpu.sh"
+mesa="$repo/build/linux/mesa/lib"
+hybris="$repo/build/linux/libhybris/install/usr/lib/hybris"
+platform=/usr/lib/aarch64-linux-gnu
+
+declare -A glibc_outputs
+for product in "${pending[@]}"; do
+    version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["glibcVersion"])' "distributions/$product/product.json")"
+    dirs="$(python3 -c 'import json,sys; print(":".join(json.load(open(sys.argv[1]))["libraryDirectories"]))' "distributions/$product/product.json")"
+    glibc_outputs[$product]="$(BIONICX_GLIBC_VERSION="$version" \
+      BIONICX_GLIBC_PREFIX="/data/user/0/io.taowen.arlinux/files/rootfs" \
+      BIONICX_GLIBC_LIBRARY_DIRS="$dirs" "$repo/tools/build/linux-glibc.sh" | tail -n 1)"
+done
+
+echo '== Product root filesystems =='
+stage="${ARLINUX_PRODUCT_STAGE:-/var/cache/arlinux/products}"; mkdir -p "$stage"
+platform_libs=(libwayland-client.so.0 libwayland-server.so.0 libwayland-egl.so.1
+  libX11-xcb.so.1 libxcb-glx.so.0 libxcb-dri3.so.0 libxcb-present.so.0
+  libxcb-xfixes.so.0 libxcb-sync.so.1 libxcb-randr.so.0 libxcb-shm.so.0
+  libxcb-render.so.0 libxshmfence.so.1)
+for product in "${pending[@]}"; do
+    product_dir="$repo/distributions/$product"; rootfs="$stage/$product/rootfs"
+    assets="$product_dir/build/assets"; glibc="${glibc_outputs[$product]}"
+    rm -rf "$stage/$product" "$assets"; mkdir -p "$rootfs" "$assets"
+    "$product_dir/tools/seed.sh" "$rootfs"
+    if [[ "$product" == omarchy ]]; then
+      tools/build/seed-pacman-keyring.sh "$rootfs" archlinuxarm archlinux archlinuxcn
+    elif [[ "$product" == arch ]]; then
+      tools/build/seed-pacman-keyring.sh "$rootfs" archlinuxarm archlinux
+    fi
+    mkdir -p "$rootfs/usr/lib/arlinux/guest" "$rootfs/usr/lib/arlinux-platform"
+    cp -a "$product_dir/guest/." "$rootfs/usr/lib/arlinux/guest/"
+    cp examples/desk-auto/dump-atspi.py examples/desk-auto/atspi-do.py \
+      "$rootfs/usr/lib/arlinux/guest/"
+    chmod 755 "$rootfs/usr/lib/arlinux/guest/"*.py \
+      "$rootfs/usr/lib/arlinux/guest/"*.sh
+    [[ ! -f "$rootfs/usr/lib/arlinux/guest/arlinux-a11y" ]] ||
+      chmod 755 "$rootfs/usr/lib/arlinux/guest/arlinux-a11y"
+    cp "$glibc/ld-linux-aarch64.so.1" "$glibc/libc.so.6" "$glibc/libm.so.6" "$glibc/ldconfig" \
+      "$rootfs/usr/lib/arlinux-platform/"
+    python3 tools/relocate-shebangs.py "$rootfs" --device-root "/data/user/0/io.taowen.arlinux/files/rootfs"
+    python3 - "$rootfs" <<'PY'
+import os, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+for directory, dirs, files in os.walk(root, followlinks=False):
+    for name in dirs + files:
+        path = pathlib.Path(directory) / name
+        if path.is_symlink():
+            target = os.readlink(path)
+            if target.startswith('/') and target.split('/')[1] not in ('proc','sys','dev'):
+                path.unlink(); path.symlink_to(os.path.relpath(root / target.lstrip('/'), path.parent))
+for name, contents in [('etc/resolv.conf','nameserver 1.1.1.1\n'), ('etc/machine-id','')]:
+    path = root / name
+    if path.is_symlink(): path.unlink()
+    path.parent.mkdir(parents=True, exist_ok=True); path.write_text(contents)
+PY
+    mkdir -p "$assets/bionicx/lib" "$assets/arlinux"
+    cp -a "$product_dir/guest" "$assets/guest"
+    cp examples/desk-auto/dump-atspi.py examples/desk-auto/atspi-do.py "$assets/guest/"
+    chmod 755 "$assets/guest/"*.py "$assets/guest/"*.sh
+    [[ ! -f "$assets/guest/arlinux-a11y" ]] ||
+      chmod 755 "$assets/guest/arlinux-a11y"
+    cp "$glibc/ld-linux-aarch64.so.1" "$glibc/libc.so.6" "$glibc/libm.so.6" "$glibc/ldconfig" "$assets/bionicx/lib/"
+    cp "build/linux/runtime/$product/libbionicx-runtime.so" "$assets/bionicx/lib/"
+    cp "build/linux/runtime/$product/sudo" "$assets/bionicx/sudo"
+    cp "$teapot/teapot-glx" "$teapot/teapot-egl" "$assets/arlinux/"
+    cp tools/arlinux-app-data/accessibility-session.sh "$assets/arlinux/"
+    cp -a tools/arlinux-app-data/fonts "$assets/arlinux/fonts"
+    python3 - "$product_dir" "$assets" "$repo/profiles/xterm.json" <<'PY'
+import json, pathlib, sys
+product, assets, fallback = map(pathlib.Path, sys.argv[1:])
+config = json.loads((product/'product.json').read_text())
+profile_file = product/'profile.json'; profile_file = profile_file if profile_file.is_file() else fallback
+profile = json.loads(profile_file.read_text()); profile['launch']['environment'].update(config.get('environment',{}))
+(assets/'xterm.json').write_text(json.dumps(profile,indent=2)+'\n')
+(assets/'guest.properties').write_text('distributionId='+product.name+'\nrequiredFiles='+','.join(config['requiredFiles'])+'\nlibraryDirectories='+','.join(config['libraryDirectories'])+'\n')
+PY
+    tar -C "$rootfs" --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
+      --exclude=./proc --exclude=./sys --exclude=./dev --exclude=./run --exclude=./tmp \
+      --exclude=./var/run --exclude=./var/lock -cf - . | zstd -T0 -8 -f -o "$assets/rootfs.tar.zst"
+    sha256sum "$assets/rootfs.tar.zst" | cut -d' ' -f1 > "$assets/rootfs-seed-id"
+
+    overlay="$stage/$product/gpu"; deploy="/data/user/0/io.taowen.arlinux/files/rootfs"
+    rpath="$deploy/usr/lib/mesa:$deploy/usr/lib/arlinux-platform:$deploy/usr/lib:$deploy/lib"
+    mkdir -p "$overlay/usr/lib/mesa/dri" "$overlay/usr/lib/arlinux-platform" \
+      "$overlay/usr/lib/arlinux/vulkan" "$overlay/usr/share/vulkan/icd.d"
+    cp -a "$mesa"/libEGL.so* "$mesa"/libGLESv2.so* "$mesa"/libGL.so* "$mesa"/libgallium-*.so \
+      "$mesa/libvulkan_freedreno.so" "$mesa/libvulkan.so.1" "$overlay/usr/lib/mesa/"
+    cp -a "$mesa/dri/libdril_dri.so" "$overlay/usr/lib/mesa/dri/"
+    ln -sfn libdril_dri.so "$overlay/usr/lib/mesa/dri/zink_dri.so"
+    ln -sfn libdril_dri.so "$overlay/usr/lib/mesa/dri/swrast_dri.so"
+    for link in libGLX.so.0 libGLX.so.1 libGLX.so.0.0.0 libGLX.so libGLX_mesa.so.0 libOpenGL.so.0 libOpenGL.so; do
+      ln -sfn libGL.so.1.2.0 "$overlay/usr/lib/mesa/$link"
+    done
+    cp "$hybris/libVkLayer_hybris_compat.so" "$hybris/VkLayer_hybris_compat.json" "$overlay/usr/lib/arlinux/vulkan/"
+    for library in "${platform_libs[@]}"; do cp -L "$platform/$library" "$overlay/usr/lib/arlinux-platform/$library"; done
+    api="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["ICD"]["api_version"])' "$mesa/../share/vulkan/icd.d/freedreno_icd.aarch64.json")"
+    python3 - "$overlay/usr/share/vulkan/icd.d/freedreno_icd.json" "$api" <<'PY'
+import json,pathlib,sys
+pathlib.Path(sys.argv[1]).write_text(json.dumps({'file_format_version':'1.0.0','ICD':{'library_path':'../../../lib/mesa/libvulkan_freedreno.so','api_version':sys.argv[2]}},indent=2)+'\n')
+PY
+    cp "$overlay/usr/share/vulkan/icd.d/freedreno_icd.json" "$overlay/usr/share/vulkan/icd.d/arlinux_icd.json"
+    while IFS= read -r -d '' library; do readelf -h "$library" >/dev/null 2>&1 && patchelf --set-rpath "$rpath" "$library"; done < <(find "$overlay/usr/lib/mesa" -type f -print0)
+    tar -C "$overlay" --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf - . | zstd -T0 -19 -f -o "$assets/gpu-qualcomm.tar.zst"
+    sha256sum "$assets/gpu-qualcomm.tar.zst" | cut -d' ' -f1 > "$assets/gpu-qualcomm-id"
+    printf '%s\n' "${ids[$product]}" > "$assets/.inputs.sha256"
+    echo "OK assets  $product"
+done

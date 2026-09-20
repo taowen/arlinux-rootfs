@@ -20,10 +20,12 @@ if command -v dbus-send >/dev/null 2>&1; then
             sleep 0.1
         done
     fi
-    dbus-send --session --dest=org.a11y.Bus /org/a11y/bus \
+    # dbus-send defaults to a signal. Properties.Set needs a method call;
+    # --print-reply also waits until accessibility is enabled before exec.
+    dbus-send --session --print-reply --dest=org.a11y.Bus /org/a11y/bus \
         org.freedesktop.DBus.Properties.Set string:org.a11y.Status \
         string:IsEnabled variant:boolean:true >/dev/null 2>&1 || true
-    dbus-send --session --dest=org.a11y.Bus /org/a11y/bus \
+    dbus-send --session --print-reply --dest=org.a11y.Bus /org/a11y/bus \
         org.freedesktop.DBus.Properties.Set string:org.a11y.Status \
         string:ScreenReaderEnabled variant:boolean:true >/dev/null 2>&1 || true
 fi

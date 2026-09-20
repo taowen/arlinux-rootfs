@@ -64,7 +64,9 @@ conform to [`schemas/product.schema.json`](../schemas/product.schema.json).
 - `compositor` is a default hint. Use `anlabwc` for a stacking desktop and
   `hyprland` for a Hyprland session.
 - `libraryDirectories` are rootfs-relative dynamic-library directories.
-- `requiredFiles` are inexpensive installation sanity checks.
+- `requiredFiles` are startup sanity checks and therefore must already exist in
+  the rootfs produced by `tools/seed.sh` and the optional post-seed hook. Do not
+  list packages that `guest/first-boot.sh` installs later.
 - `environment` is merged into the launch profile at bundle time.
 
 Never put an Android application ID in a distribution repository. Multiple

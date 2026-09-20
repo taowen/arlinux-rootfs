@@ -70,6 +70,8 @@ contract and a from-scratch walkthrough. Public reference implementations are:
 - [arlinux-lxqt](https://github.com/taowen/arlinux-lxqt)
 
 The on-disk archive contract is documented in [PROTOCOL.md](PROTOCOL.md).
+See [Graphics and sandbox compatibility](docs/GRAPHICS.md) for Wayland, X11,
+OpenGL, Vulkan, and application capability fallback behavior.
 
 ## Repository boundaries
 

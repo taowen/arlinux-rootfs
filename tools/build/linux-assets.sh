@@ -113,6 +113,15 @@ for product in "${pending[@]}"; do
     if [[ -x "$product_dir/tools/post-seed.sh" ]]; then
       "$product_dir/tools/post-seed.sh" "$rootfs"
     fi
+    python3 - "$product_dir/product.json" "$rootfs" <<'PY'
+import json, os, pathlib, sys
+product = json.loads(pathlib.Path(sys.argv[1]).read_text())
+rootfs = pathlib.Path(sys.argv[2])
+missing = [path for path in product['requiredFiles']
+           if not os.path.lexists(rootfs / path)]
+if missing:
+    raise SystemExit('rootfs seed is missing required files: ' + ', '.join(missing))
+PY
     mkdir -p "$rootfs/usr/lib/arlinux/guest" "$rootfs/usr/lib/arlinux-platform"
     cp -a "$product_dir/guest/." "$rootfs/usr/lib/arlinux/guest/"
     cp examples/desk-auto/dump-atspi.py examples/desk-auto/atspi-do.py \

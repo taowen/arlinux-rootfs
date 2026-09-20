@@ -243,7 +243,10 @@ int prctl(int option, ...) {
     unsigned long a = va_arg(ap, unsigned long), b = va_arg(ap, unsigned long),
                   c = va_arg(ap, unsigned long), d = va_arg(ap, unsigned long);
     va_end(ap);
-    if (state.active && option == PR_SET_SECCOMP) { errno = EINVAL; return -1; }
+    /* Guest syscall translation and SIGSYS handling cannot support additional
+     * guest filters. Capability probes must agree before and after namespace
+     * setup. PR_GET_SECCOMP still reports the inherited Android filter. */
+    if (option == PR_SET_SECCOMP) { errno = EINVAL; return -1; }
     return raw(SYS_prctl, option, a, b, c, d, 0);
 }
 /* Return 1 when handled; preserve libc's -1/errno convention. */
@@ -275,7 +278,7 @@ int bionicx_ns_syscall(long n, long a, long b, long c, long d, long e, long f,
     else if (n == SYS_read && state.user) *result = read(a, (void *)b, c);
     else if (n == SYS_write && state.user) *result = write(a, (const void *)b, c);
     else if (n == SYS_prctl) *result = prctl(a, b, c, d, e);
-    else if (n == SYS_seccomp && state.active) { errno = ENOSYS; *result = -1; }
+    else if (n == SYS_seccomp) { errno = ENOSYS; *result = -1; }
     else if (n == SYS_clone && ((a & NS_FLAGS) || !(a & CLONE_VM))) {
         if (a & NS_FLAGS) state.active = 1;
         if (b || (a & (CLONE_VM | CLONE_THREAD))) { errno = ENOTSUP; *result = -1; }

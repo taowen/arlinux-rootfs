@@ -45,6 +45,7 @@ for product in "${products[@]}"; do
     assets="distributions/$product/build/assets"
     ids[$product]="$(input_id "$product")"
     if [[ "$rebuild" == true || ! -s "$assets/rootfs.tar.zst" || ! -s "$assets/gpu-qualcomm.tar.zst" \
+          || ! -s "$assets/gpu-generic.tar.zst" || ! -s "$assets/gpu-generic-id" \
           || "$(cat "$assets/.inputs.sha256" 2>/dev/null || true)" != "${ids[$product]}" ]]; then
         pending+=("$product")
     else
@@ -197,6 +198,28 @@ PY
     while IFS= read -r -d '' library; do readelf -h "$library" >/dev/null 2>&1 && patchelf --set-rpath "$rpath" "$library"; done < <(find "$overlay/usr/lib/mesa" -type f -print0)
     tar -C "$overlay" --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf - . | zstd -T0 -19 -f -o "$assets/gpu-qualcomm.tar.zst"
     sha256sum "$assets/gpu-qualcomm.tar.zst" | cut -d' ' -f1 > "$assets/gpu-qualcomm-id"
+
+    # Both profiles share Mesa/Zink and the application compatibility layer.
+    # The generic profile uses Android's vendor Vulkan driver through libhybris.
+    generic="$stage/$product/gpu-generic"
+    mkdir -p "$generic"
+    cp -a "$overlay/." "$generic/"
+    rm -f "$generic/usr/lib/mesa/libvulkan_freedreno.so" \
+      "$generic/usr/share/vulkan/icd.d/freedreno_icd.json"
+    mkdir -p "$generic/usr/lib/hybris"
+    cp -a "$hybris/." "$generic/usr/lib/hybris/"
+    python3 - "$generic/usr/share/vulkan/icd.d/hybris_icd.json" <<'PY'
+import json,pathlib,sys
+pathlib.Path(sys.argv[1]).write_text(json.dumps({'file_format_version':'1.0.0','ICD':{'library_path':'../../../lib/hybris/libhybris-vulkan-icd.so.0','api_version':'1.3.0'}},indent=2)+'\n')
+PY
+    cp "$generic/usr/share/vulkan/icd.d/hybris_icd.json" "$generic/usr/share/vulkan/icd.d/arlinux_icd.json"
+    while IFS= read -r -d '' library; do
+      if readelf -h "$library" >/dev/null 2>&1; then
+        patchelf --set-rpath "$rpath:$deploy/usr/lib/hybris:$deploy/usr/lib/hybris/libhybris" "$library"
+      fi
+    done < <(find "$generic/usr/lib/hybris" -type f -print0)
+    tar -C "$generic" --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf - . | zstd -T0 -19 -f -o "$assets/gpu-generic.tar.zst"
+    sha256sum "$assets/gpu-generic.tar.zst" | cut -d' ' -f1 > "$assets/gpu-generic-id"
     printf '%s\n' "${ids[$product]}" > "$assets/.inputs.sha256"
     echo "OK assets  $product"
 done

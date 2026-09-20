@@ -12,7 +12,8 @@ import zipfile
 
 
 PROTOCOL = 1
-PAYLOADS = ("rootfs.tar.zst", "gpu-qualcomm.tar.zst", "bionicx/lib/ld-linux-aarch64.so.1",
+PAYLOADS = ("rootfs.tar.zst", "rootfs-seed-id", "gpu-qualcomm.tar.zst", "gpu-qualcomm-id",
+            "gpu-generic.tar.zst", "gpu-generic-id", "guest.properties", "bionicx/lib/ld-linux-aarch64.so.1",
             "bionicx/lib/libc.so.6", "bionicx/lib/libm.so.6",
             "bionicx/lib/ldconfig", "bionicx/lib/libbionicx-runtime.so",
             "bionicx/sudo", "xterm.json")

@@ -104,6 +104,13 @@ framework=$(cd "$(dirname "$0")/../../.." && pwd)
 
 The framework never branches on a distribution ID.
 
+The shared builder also packages both GPU overlays: `gpu-qualcomm.tar.zst`
+(Mesa Turnip) and `gpu-generic.tar.zst` (Android vendor Vulkan via libhybris),
+each with its corresponding `*-id` file. Both are required bundle payloads;
+the host selects the device-appropriate one at installation. Distribution
+authors do not need separate Qualcomm and Mali recipes. See
+[graphics support](GRAPHICS.md) for transport capabilities and limitations.
+
 ## First boot
 
 Files under `guest/` are installed at `/usr/lib/arlinux/guest`. An executable

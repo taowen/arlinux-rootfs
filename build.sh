@@ -20,6 +20,7 @@ select_products() {
     [[ -f "distributions/$product/product.json" ]] || {
       echo "Unknown distribution: $product" >&2; exit 2;
     }
+    python3 tools/validate-distribution.py "distributions/$product"
   done
 }
 
@@ -38,9 +39,13 @@ case "$command" in
   list)
     products
     ;;
+  validate)
+    [[ $# -gt 0 ]] || { echo 'validate requires a distribution directory' >&2; exit 2; }
+    for distribution in "$@"; do python3 tools/validate-distribution.py "$distribution"; done
+    ;;
   verify)
     [[ $# -gt 0 ]] || { echo 'verify requires at least one bundle' >&2; exit 2; }
     for bundle in "$@"; do python3 tools/bundle.py verify "$bundle"; done
     ;;
-  *) echo "usage: $0 {build [DISTRIBUTION...]|doctor|list|verify BUNDLE...}" >&2; exit 2 ;;
+  *) echo "usage: $0 {build [DISTRIBUTION...]|doctor|list|validate DIRECTORY...|verify BUNDLE...}" >&2; exit 2 ;;
 esac

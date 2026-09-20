@@ -1,15 +1,25 @@
 # Arlinux rootfs
 
-Arlinux rootfs builds portable Linux distribution bundles for the Arlinux
-Android host. This repository contains only Linux code and uses ordinary Bash
-and Linux tools. A bundle is not an APK: it contains a root filesystem, the
-shared glibc compatibility runtime and the Qualcomm userspace GPU stack.
+Arlinux rootfs is the open Linux side of Arlinux. It cross-builds AArch64 Linux
+root filesystems into distribution bundles that can be imported by the Arlinux
+Android application. The Android host is intentionally not required to build,
+inspect, or extend a distribution.
 
-## Build
+A bundle contains:
 
-Builds run on an x86-64 Linux machine and produce AArch64 bundles. On a fresh
-Debian or Ubuntu installation, enable the arm64 architecture and install the
-toolchain:
+- a distribution-owned root filesystem;
+- the bionicx glibc compatibility runtime;
+- a Qualcomm Turnip/Zink graphics overlay;
+- a launch profile and a versioned manifest.
+
+The project is Linux-native. Its build and distribution interfaces use Bash,
+Python, and standard Linux tools; there are no Windows or PowerShell build
+paths in this repository or its distribution repositories.
+
+## Build an existing distribution
+
+Builds run without root privileges on an x86-64 Debian or Ubuntu host and
+produce AArch64 bundles. Install the toolchain once:
 
 ```bash
 sudo dpkg --add-architecture arm64
@@ -23,39 +33,57 @@ sudo apt install \
   libx11-dev:arm64 libx11-xcb-dev:arm64 libxcb1-dev:arm64
 ```
 
-Then clone and build:
+Clone and build:
 
 ```bash
 git clone --recurse-submodules https://github.com/taowen/arlinux-rootfs.git
 cd arlinux-rootfs
 ./build.sh doctor
-./build.sh build                 # all distributions
-./build.sh build debian arch     # selected distributions
+./build.sh list
+./build.sh build debian
 ./build.sh verify out/debian.arlinux-rootfs
 ```
 
-Build state stays under `build/`, reusable downloads and source builds under
-`${XDG_CACHE_HOME:-$HOME/.cache}/arlinux`, distribution assets under each
-distribution's ignored `build/` directory, and finished bundles under `out/`.
-Set `ARLINUX_CACHE_DIR` to place the shared cache elsewhere. The build itself
-does not require root privileges.
+Use `./build.sh build` to build every checked-out distribution. Build state is
+written to `build/`, finished bundles to `out/`, and reusable downloads to
+`${XDG_CACHE_HOME:-$HOME/.cache}/arlinux`. Set `ARLINUX_CACHE_DIR` to move the
+cache.
 
-## Add a distribution
+## Create a distribution
 
-Place a repository or submodule at `distributions/<id>`. The ID must be lower
-case and may contain digits and hyphens. It needs only:
+A distribution is an independent Git repository placed at
+`distributions/<id>`. It does not link against or import the private Android
+host. To start a repository alongside the built-in examples:
 
-- `product.json`: display name, glibc version, compositor hint, library paths,
-  required files and optional launch environment;
-- `tools/seed.sh OUTPUT`: create an AArch64 root filesystem at `OUTPUT`;
-- `guest/`: files installed at `/usr/lib/arlinux/guest`;
-- `native/product-policy.h`: distribution-specific compatibility policy;
-- optional `profile.json` and `rootfs.lock.json` for launch and reproducibility.
+```bash
+git clone https://github.com/you/my-arlinux-distribution.git distributions/my-linux
+./build.sh validate distributions/my-linux
+./build.sh build my-linux
+```
 
-`./build.sh list` discovers distributions from their `product.json`; the build
-contains no hard-coded distribution list. Start by copying the structure of the
-closest existing distribution and keep host UI or device automation out of the
-distribution repository.
+Read [Distribution authoring](docs/DISTRIBUTION-AUTHORING.md) for the complete
+contract and a from-scratch walkthrough. Public reference implementations are:
 
-See [PROTOCOL.md](PROTOCOL.md) for the bundle contract. Android UI, input,
-compositors and installation live in the separate Arlinux host repository.
+- [arlinux-debian](https://github.com/taowen/arlinux-debian)
+- [arlinux-arch](https://github.com/taowen/arlinux-arch)
+- [arlinux-omarchy](https://github.com/taowen/arlinux-omarchy)
+- [arlinux-lxqt](https://github.com/taowen/arlinux-lxqt)
+
+The on-disk archive contract is documented in [PROTOCOL.md](PROTOCOL.md).
+
+## Repository boundaries
+
+Distribution repositories own package selection, rootfs creation, first-boot
+configuration, launch profiles, and distribution-specific compatibility
+policy. This repository owns the bundle format, glibc bridge, graphics stack,
+cross-build tooling, validation, and shared guest support.
+
+Android UI, input, lifecycle, and bundle installation belong to the private
+host. A distribution must not depend on host source code or Android build
+artifacts.
+
+## License
+
+Arlinux rootfs is GPL-3.0-or-later. Bundled distributions and third-party
+submodules retain their own licenses and notices; distributors are responsible
+for preserving all applicable notices in binary bundles.

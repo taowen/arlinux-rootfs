@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/taowen/arlinux/schemas/profile.schema.json",
+  "$id": "https://github.com/taowen/arlinux-rootfs/blob/main/schemas/profile.schema.json",
   "title": "Arlinux application profile",
   "description": "Schema 3 launch config. Guest ELFs keep Debian PT_INTERP; glibc_exec starts overlay ld.so (explicit-loader). Profiles must not set mode/loader/libraryPath.",
   "type": "object",

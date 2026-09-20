@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/taowen/arlinux-rootfs/blob/main/schemas/product.schema.json",
+  "title": "Arlinux distribution product",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "glibcVersion", "libraryDirectories", "requiredFiles"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "name": {"type": "string", "minLength": 1},
+    "compositor": {"enum": ["anlabwc", "hyprland"]},
+    "glibcVersion": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"},
+    "libraryDirectories": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/relativePath"}
+    },
+    "requiredFiles": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/relativePath"}
+    },
+    "environment": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+      "additionalProperties": {"type": "string"}
+    }
+  },
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//).+$"
+    }
+  }
+}

@@ -8,7 +8,10 @@ export ARLINUX_CACHE_DIR="${ARLINUX_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/a
 rebuild=false
 if [[ "${1:-}" == --rebuild ]]; then rebuild=true; shift; fi
 products=("$@")
-[[ ${#products[@]} -gt 0 ]] || products=(debian arch omarchy)
+if [[ ${#products[@]} -eq 0 ]]; then
+    mapfile -t products < <(find distributions -mindepth 2 -maxdepth 2 \
+        -name product.json -printf '%h\n' | sed 's|.*/||' | sort)
+fi
 gpu_inputs="$(git submodule status third_party/mesa third_party/libhybris third_party/android-headers)"
 
 ./tools/build/doctor.sh --quiet
@@ -29,8 +32,8 @@ input_id() {
             git ls-files --others --exclude-standard -z -- \
                 guest native tools product.json profile.json rootfs.lock.json \
                 | sort -z | xargs -0 -r sha256sum)
+        git -C "distributions/$product" submodule status --recursive || true
         printf '%s\n' "$gpu_inputs"
-        [[ "$product" == omarchy ]] && git -C distributions/omarchy submodule status
         true
     } | sha256sum | cut -d' ' -f1
 }
@@ -107,10 +110,8 @@ for product in "${pending[@]}"; do
     assets="$product_dir/build/assets"; glibc="${glibc_outputs[$product]}"
     rm -rf "$stage/$product" "$assets"; mkdir -p "$rootfs" "$assets"
     "$product_dir/tools/seed.sh" "$rootfs"
-    if [[ "$product" == omarchy ]]; then
-      tools/build/seed-pacman-keyring.sh "$rootfs" archlinuxarm archlinux archlinuxcn
-    elif [[ "$product" == arch ]]; then
-      tools/build/seed-pacman-keyring.sh "$rootfs" archlinuxarm archlinux
+    if [[ -x "$product_dir/tools/post-seed.sh" ]]; then
+      "$product_dir/tools/post-seed.sh" "$rootfs"
     fi
     mkdir -p "$rootfs/usr/lib/arlinux/guest" "$rootfs/usr/lib/arlinux-platform"
     cp -a "$product_dir/guest/." "$rootfs/usr/lib/arlinux/guest/"

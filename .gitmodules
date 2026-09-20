@@ -18,3 +18,6 @@
 	url = https://github.com/taowen/mesa.git
 	branch = arlinux-official-base
 	path = third_party/mesa
+[submodule "distributions/lxqt"]
+	path = distributions/lxqt
+	url = https://github.com/taowen/arlinux-lxqt.git

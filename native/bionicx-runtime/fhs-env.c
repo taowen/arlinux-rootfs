@@ -150,8 +150,6 @@ static const char *const runtime_environment_names[] = {
     ARLINUX_PRODUCT_ENVIRONMENT
     "BIONICX_REWRITE_ABSOLUTE_SYMLINKS",
     "BIONICX_EXECFN",
-    "BIONICX_CHILD_FLAGS",
-    "BIONICX_CHILD_DROP_FLAGS",
     "BIONICX_LOG_EXEC",
     "SSL_CERT_FILE",
     "SSL_CERT_DIR",

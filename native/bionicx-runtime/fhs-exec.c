@@ -227,8 +227,6 @@ static char **loader_arguments(const char *path, char *const arguments[],
     return result;
 }
 
-static char **with_child_flags(char *const arguments[]);
-static void free_child_flags(char **merged, char *const original[]);
 static void log_exec(const char *path, char *const arguments[]);
 
 
@@ -236,7 +234,6 @@ struct guest_exec {
     const char *run_path;
     char *const *run_args;
     const char *execfn;
-    char **child_args;
     char **script;
     char **wrapped;
     char loader[PATH_MAX];
@@ -249,7 +246,7 @@ static int prepare_guest_exec(const char *path, char *const arguments[],
                               int reject_unparsed_shebang,
                               struct guest_exec *out,
                               char *const environment[]);
-static void free_guest_exec(struct guest_exec *g, char *const original[]);
+static void free_guest_exec(struct guest_exec *g);
 
 static void keep_standard_fds(void) {
     for (int fd = STDIN_FILENO; fd <= STDERR_FILENO; ++fd) {
@@ -301,144 +298,29 @@ static int exec_script(const char *path, char *const arguments[],
     result = execute(guest.run_path, (char *const *)guest.run_args);
     saved_errno = errno;
     bionicx_restore_execfn(had_fn, saved_fn);
-    free_guest_exec(&guest, arguments);
+    free_guest_exec(&guest);
     errno = saved_errno;
     return result;
 }
 
-/* Chromium-family helpers re-exec themselves with --type=. Browser argv
- * switches are not forwarded, and Lark/Feishu does not read
- * CHROME_EXTRA_FLAGS. Rewrite captured BIONICX_CHILD_FLAGS only for those
- * helpers so dpkg/sh keep their original argv. Drop matching switch keys
- * then append so later --use-angle=swiftshader-webgl cannot last-win, and
- * honor BIONICX_CHILD_DROP_FLAGS for boolean switches such as
- * --disable-gpu-compositing. */
-#define CHILD_FLAG_SLOTS 16
-
-static int arguments_have_prefix(char *const arguments[], const char *prefix) {
-    size_t length = strlen(prefix);
-    if (arguments == NULL) return 0;
-    for (size_t i = 0; arguments[i] != NULL; ++i)
-        if (strncmp(arguments[i], prefix, length) == 0)
-            return 1;
-    return 0;
-}
-
-static size_t split_child_flags(const char *extra, char *copy, size_t copy_size,
-                                const char *flags[], size_t max) {
-    if (extra == NULL || extra[0] == '\0' || copy == NULL || flags == NULL)
-        return 0;
-    snprintf(copy, copy_size, "%s", extra);
-    size_t flag_count = 0;
-    char *cursor = copy;
-    while (*cursor != '\0' && flag_count < max) {
-        while (*cursor == ' ') ++cursor;
-        if (*cursor == '\0') break;
-        flags[flag_count++] = cursor;
-        char *end = cursor;
-        while (*end != '\0' && *end != ' ') ++end;
-        if (*end != '\0') *end++ = '\0';
-        cursor = end;
-    }
-    return flag_count;
-}
-
-static size_t flag_key_length(const char *flag) {
-    const char *equals = strchr(flag, '=');
-    return equals != NULL ? (size_t)(equals - flag) : strlen(flag);
-}
-
-static int same_flag_key(const char *left, const char *right) {
-    size_t length = flag_key_length(left);
-    return length == flag_key_length(right) &&
-            strncmp(left, right, length) == 0;
-}
-
-static int flag_key_in_list(const char *flag, const char *list[], size_t count) {
-    for (size_t i = 0; i < count; ++i)
-        if (same_flag_key(flag, list[i])) return 1;
-    return 0;
-}
-
-static char **with_child_flags(char *const arguments[]) {
-    const char *extra = bionicx_captured_value("BIONICX_CHILD_FLAGS");
-    if (extra == NULL || extra[0] == '\0' || arguments == NULL)
-        return NULL;
-    if (!arguments_have_prefix(arguments, "--type="))
-        return NULL;
-
-    char extra_copy[PATH_MAX];
-    const char *flags[CHILD_FLAG_SLOTS];
-    size_t flag_count = split_child_flags(extra, extra_copy, sizeof(extra_copy),
-                                         flags, CHILD_FLAG_SLOTS);
-    if (flag_count == 0) return NULL;
-
-    char drop_copy[PATH_MAX];
-    const char *drops[CHILD_FLAG_SLOTS];
-    size_t drop_count = split_child_flags(
-            bionicx_captured_value("BIONICX_CHILD_DROP_FLAGS"),
-            drop_copy, sizeof(drop_copy), drops, CHILD_FLAG_SLOTS);
-
-    size_t original = 0;
-    while (arguments[original] != NULL) ++original;
-    char **merged = calloc(original + flag_count + 1, sizeof(*merged));
-    if (merged == NULL) return NULL;
-    size_t out = 0;
-    for (size_t i = 0; i < original; ++i) {
-        if (flag_key_in_list(arguments[i], drops, drop_count)) continue;
-        if (flag_key_in_list(arguments[i], flags, flag_count)) continue;
-        merged[out] = strdup(arguments[i]);
-        if (merged[out] == NULL) {
-            while (out > 0) free(merged[--out]);
-            free(merged);
-            return NULL;
-        }
-        ++out;
-    }
-    for (size_t i = 0; i < flag_count; ++i) {
-        merged[out] = strdup(flags[i]);
-        if (merged[out] == NULL) {
-            while (out > 0) free(merged[--out]);
-            free(merged);
-            return NULL;
-        }
-        ++out;
-    }
-    merged[out] = NULL;
-    return merged;
-}
-
-static void free_child_flags(char **merged, char *const original[]) {
-    (void)original;
-    if (merged == NULL) return;
-    for (size_t i = 0; merged[i] != NULL; ++i) free(merged[i]);
-    free(merged);
-}
-
-static void free_guest_exec(struct guest_exec *g, char *const original[]) {
+static void free_guest_exec(struct guest_exec *g) {
     if (g == NULL)
         return;
     free(g->script);
     free(g->wrapped);
-    free_child_flags(g->child_args, original);
     g->script = NULL;
     g->wrapped = NULL;
-    g->child_args = NULL;
 }
 
 static int prepare_guest_exec(const char *path, char *const arguments[],
                               int reject_unparsed_shebang,
                               struct guest_exec *out,
                               char *const environment[]) {
-    char *const *use_args;
-
     memset(out, 0, sizeof(*out));
-    out->child_args = with_child_flags(arguments);
-    use_args = out->child_args != NULL ? out->child_args : arguments;
     out->run_path = path;
-    out->run_args = use_args;
+    out->run_args = arguments;
     out->execfn = path;
-    out->script = script_arguments(path, use_args, out->program,
+    out->script = script_arguments(path, arguments, out->program,
                                    out->interp_arg);
     if (out->script != NULL) {
         const char *interpreter = realpath(out->program, out->canonical)
@@ -465,7 +347,7 @@ static int prepare_guest_exec(const char *path, char *const arguments[],
             close(descriptor);
             if (n == 2 && magic[0] == '#' && magic[1] == '!') {
                 errno = ENOEXEC;
-                free_guest_exec(out, arguments);
+                free_guest_exec(out);
                 return -1;
             }
         }
@@ -477,7 +359,7 @@ static int prepare_guest_exec(const char *path, char *const arguments[],
         path = out->canonical;
     out->run_path = path;
     out->execfn = path;
-    out->wrapped = loader_arguments(path, (char *const *)use_args,
+    out->wrapped = loader_arguments(path, arguments,
                                     out->loader, environment);
     if (out->wrapped != NULL) {
         out->run_path = out->loader;
@@ -715,7 +597,7 @@ int execve(const char *path, char *const arguments[],
     merged = bionicx_with_runtime_environment(environment, &owned_from);
     if (environment != NULL && merged == NULL) {
         bionicx_restore_execfn(had_fn, saved_fn);
-        free_guest_exec(&guest, arguments);
+        free_guest_exec(&guest);
         return -1;
     }
     actual_environment = merged != NULL ? merged : environment;
@@ -725,7 +607,7 @@ int execve(const char *path, char *const arguments[],
                   actual_environment);
     saved_errno = errno;
     bionicx_restore_execfn(had_fn, saved_fn);
-    free_guest_exec(&guest, arguments);
+    free_guest_exec(&guest);
     bionicx_free_runtime_environment(merged, owned_from);
     errno = saved_errno;
     return result;
@@ -768,7 +650,7 @@ int posix_spawn(pid_t *pid, const char *path,
     merged = bionicx_with_runtime_environment(environment, &owned_from);
     if (environment != NULL && merged == NULL) {
         bionicx_restore_execfn(had_fn, saved_fn);
-        free_guest_exec(&guest, arguments);
+        free_guest_exec(&guest);
         return ENOMEM;
     }
     actual_environment = merged != NULL ? merged : environment;
@@ -776,7 +658,7 @@ int posix_spawn(pid_t *pid, const char *path,
     result = next(pid, guest.run_path, file_actions, attrp,
                   (char *const *)guest.run_args, actual_environment);
     bionicx_restore_execfn(had_fn, saved_fn);
-    free_guest_exec(&guest, arguments);
+    free_guest_exec(&guest);
     bionicx_free_runtime_environment(merged, owned_from);
     return result;
 }

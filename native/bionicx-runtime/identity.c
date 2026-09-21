@@ -104,6 +104,7 @@ static const char *synthetic_shell(void) {
 
 static int synthetic_user(uid_t uid, struct passwd *value, char *buffer,
                           size_t length, struct passwd **result) {
+    *result = NULL;
     const char *home = getenv("HOME");
     if (home == NULL || home[0] != '/') home = "/tmp";
     const char *fields[] = {"bionicx", "x", "BionicX Android app", home,
@@ -149,6 +150,32 @@ struct passwd *getpwuid(uid_t uid) {
     static __thread char buffer[PATH_MAX];
     struct passwd *result = NULL;
     int status = getpwuid_r(uid, &value, buffer, sizeof(buffer), &result);
+    if (status != 0) errno = status;
+    return status == 0 ? result : NULL;
+}
+
+/* Name and UID lookups must describe the same guest account. In particular,
+ * GLib resolves LOGNAME by name before falling back to the numeric UID. */
+int getpwnam_r(const char *name, struct passwd *value, char *buffer,
+              size_t length, struct passwd **result) {
+    static int (*next)(const char *, struct passwd *, char *, size_t,
+                       struct passwd **);
+    if (next == NULL) next = dlsym(RTLD_NEXT, "getpwnam_r");
+    int guest = getenv("BIONICX_ROOTFS") != NULL;
+    if (guest && strcmp(name, "bionicx") == 0)
+        return synthetic_user(geteuid(), value, buffer, length, result);
+    int status = next(name, value, buffer, length, result);
+    if (guest && status == 0 && *result != NULL &&
+            (*result)->pw_uid == geteuid())
+        return synthetic_user(geteuid(), value, buffer, length, result);
+    return status;
+}
+
+struct passwd *getpwnam(const char *name) {
+    static __thread struct passwd value;
+    static __thread char buffer[PATH_MAX];
+    struct passwd *result = NULL;
+    int status = getpwnam_r(name, &value, buffer, sizeof(buffer), &result);
     if (status != 0) errno = status;
     return status == 0 ? result : NULL;
 }

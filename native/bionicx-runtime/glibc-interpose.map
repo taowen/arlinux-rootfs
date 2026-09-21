@@ -74,6 +74,9 @@ GLIBC_2.17 {
     readlinkat;
     __readlink_chk;
     __readlinkat_chk;
+    realpath;
+    canonicalize_file_name;
+    __realpath_chk;
     chdir;
     getuid;
     getgid;

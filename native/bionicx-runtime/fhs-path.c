@@ -453,10 +453,9 @@ const char *bionicx_redirect_path(const char *path, char buffer[PATH_MAX]) {
             strcmp(path, "/etc") == 0 || strncmp(path, "/etc/", 5) == 0 ||
             strcmp(path, "/opt") == 0 || strncmp(path, "/opt/", 5) == 0 ||
             strcmp(path, "/var") == 0 || strncmp(path, "/var/", 5) == 0 ||
-            /* dpkg --root still extracts /usr as absolute names after a
-             * fake chroot + chdir("/"). Point "/" at the guest rootfs. */
-            ((strcmp(path, "/") == 0 || strcmp(path, "/.") == 0) &&
-             bionicx_package_transaction())) {
+            /* Ordinary applications must enumerate the same root that owns
+             * the redirected /usr, /etc and /lib trees, not Android's root. */
+            strcmp(path, "/") == 0 || strcmp(path, "/.") == 0) {
         target = bionicx_captured_rootfs();
         if (target == NULL) target = bionicx_getenv("BIONICX_ROOTFS");
         if (target == NULL || target[0] != '/') return path;
@@ -1325,6 +1324,19 @@ ssize_t readlinkat(int directory, const char *path, char *value, size_t size) {
 /* Fortified callers must see the same guest executable and namespace as
  * readlink, while retaining glibc's fail-fast buffer-size check. */
 extern void __chk_fail(void) __attribute__((noreturn));
+
+char *__realpath_chk(const char *path, char *resolved_path, size_t size) {
+    char *canonical = realpath(path, NULL);
+    if (canonical == NULL) return NULL;
+    size_t length = strlen(canonical) + 1;
+    if (length > size) {
+        free(canonical);
+        __chk_fail();
+    }
+    memcpy(resolved_path, canonical, length);
+    free(canonical);
+    return resolved_path;
+}
 
 ssize_t __readlink_chk(const char *path, char *value, size_t size,
                        size_t value_size) {

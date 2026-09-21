@@ -214,9 +214,7 @@ int clone(int (*fn)(void *), void *stack, int flags, void *arg, ...) {
     va_end(ap);
     if (!host_clone) host_clone = dlsym(RTLD_NEXT, "clone");
     if (!fn || !stack) { errno = EINVAL; return -1; }
-    const char *fork_exec = bionicx_getenv("BIONICX_FORK_EXEC");
-    if (fork_exec && strcmp(fork_exec, "1") == 0 &&
-        flags == (CLONE_VM | CLONE_VFORK | CLONE_PIDFD | SIGCHLD))
+    if (flags == (CLONE_VM | CLONE_VFORK | CLONE_PIDFD | SIGCHLD))
         return bionicx_fork_exec(fn, arg, ptid);
     if ((flags & NS_FLAGS) && (flags & (CLONE_VM | CLONE_THREAD))) {
         errno = ENOTSUP; return -1;

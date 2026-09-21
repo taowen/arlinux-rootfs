@@ -17,6 +17,18 @@ identity, networking device configuration, power management, and application
 lifecycle. Do not require systemd as PID 1, a display manager, DRM/KMS, logind,
 kernel modules, or privileged mounts.
 
+Applications run with the Android app's real UID, not host root. The runtime
+exposes the current guest account as `bionicx`, with the instance home directory;
+standard passwd lookups by name or UID describe the same account. Do not
+hard-code an Android `u0_aNNN` name or assume the UID is 1000.
+
+Image loaders based on recent Glycin require an explicit platform choice:
+Android app UIDs cannot create Bubblewrap's nested mount namespace. LXQt uses
+the upstream `GLYCIN_DISABLE_SANDBOX=i-know-the-risks` setting in its launch
+environment so GTK icons and images can load. The Android app sandbox still
+applies, but image decoding has **no additional loader sandbox** and shares the
+app's access to guest data. This is not equivalent to Bubblewrap isolation.
+
 ## Required layout
 
 Create a Git repository under `distributions/<id>`. The directory name is the
@@ -120,7 +132,9 @@ the Android device. It receives these important variables:
 - `BIONICX_ROOTFS`: absolute rootfs path;
 - `BIONICX_FILES`: host application files directory;
 - `HOME`: persistent home for this instance;
-- `XDG_RUNTIME_DIR`: per-session sockets and transient files.
+- `XDG_RUNTIME_DIR`: private session sockets and state (mode `0700`).
+- `TMPDIR`: temporary files, also accessible as `/tmp`. This is a separate
+  directory; never repoint it to `XDG_RUNTIME_DIR` or change the latter's mode.
 
 If installing or upgrading libc replaces the loader beneath the current
 process, exit with status `75`. The host restarts first boot at a fresh process
@@ -130,6 +144,11 @@ idempotent because it can be interrupted and run again.
 Use the distribution package manager rather than copying shared libraries by
 hand. Disable only service hooks that fundamentally require a booted Linux
 system, and document each exception.
+
+Install the distribution's normal Wayland and X11 client libraries. The shared
+GPU overlays contain Mesa and the device driver, but deliberately do not bundle
+display client libraries from the framework's build environment. This keeps the
+desktop and its toolkit libraries on one package-manager-owned ABI generation.
 
 ## Launch profile
 
@@ -167,6 +186,20 @@ and `${DISPLAY}`. A Wayland desktop normally sets:
 The compositor is already running in the Android host. Start the desktop
 session or application, not a second Linux compositor.
 
+Use the desktop's upstream session entry point so its configuration search
+paths, menu prefix, and theme defaults are initialized together. Install the
+icon and theme packages those defaults reference. With LXQt, `startlxqt`
+provides these defaults; its session configuration can declare
+`XDG_CURRENT_DESKTOP=LXQt:wlroots` in `[Environment]` to select the panel's
+standard Wayland window-management backend on the host compositor.
+
+Applications use ordinary Linux paths and the platform-provided loader/libc.
+The host installs and selects those runtime libraries. Do not prepend the
+distribution's original libc directory to `LD_LIBRARY_PATH`: this bypasses
+the shared filesystem and process integration, including libc-internal calls.
+Applications should launch with their usual commands; graphics defaults come
+from the runtime described in [graphics support](GRAPHICS.md).
+
 ## Native compatibility policy
 
 `native/product-policy.h` is compiled into the bionicx runtime. Most
@@ -188,6 +221,18 @@ compatibility fixes belong in `arlinux-rootfs`, not in a distribution policy.
 - PulseAudio clients connect to the socket supplied under the host runtime
   directory; reference distributions install the standard ALSA Pulse plugin.
 - AT-SPI runs on the session D-Bus bus through `accessibility-session.sh`.
+- Hosted Android keyboard input can use the shared IBus engine at
+  `/usr/lib/arlinux/hosted-ime.py`. Install IBus, its Python introspection
+  bindings and the GTK input modules, then install the accompanying
+  `org.arlinux.HostedInput.service` in `/usr/share/dbus-1/services`.
+  Before launching the desktop, call `org.freedesktop.DBus.Peer.Ping` on the
+  session-bus destination `org.arlinux.HostedInput`, path `/org/arlinux/HostedInput`.
+  D-Bus activates the engine and waits for readiness; Qt clients must not start
+  before their input service is available. Set `QT_IM_MODULE=ibus`,
+  `GTK_IM_MODULE=ibus` and `XMODIFIERS=@im=ibus` in the desktop environment.
+  The engine starts IBus in its standard daemon mode and registers itself;
+  applications discover it through their normal input modules. No per-application
+  socket address or source modification is needed. LXQt provides this setup.
 - `wl-clipboard` and `wtype` are suitable standard tools for clipboard and
   key injection inside the guest.
 - Android owns network, Bluetooth, brightness, suspend, reboot, and device

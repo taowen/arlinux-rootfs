@@ -18,8 +18,10 @@ therefore uses the same selected driver. Both Turnip and libhybris execute in
 the application process, or in an application-owned GPU worker process.
 
 The runtime supplies the driver search paths and GPU environment to the entire
-session. This applies equally to native applications and to Chromium/Electron;
-there is no per-application graphics configuration.
+session. Driver availability does not, by itself, guarantee accelerated window
+presentation: an application must also support an available presentation path.
+The distribution supplies its standard Wayland, X11, and XCB client libraries;
+the GPU overlay does not replace them with copies from the build environment.
 
 ## Presentation
 
@@ -55,5 +57,13 @@ vendor handles can contain metadata that cannot be reconstructed from a bare
 DMA-BUF descriptor, and vendor EGL implementations do not consistently support
 DMA-BUF import. AHB is therefore the portable host boundary.
 
-No user or distribution configuration is required. Inherit the Arlinux session
-environment and launch the application with its normal command line.
+The Android renderer does not currently expose a GBM render device and
+`linux-dmabuf` import. Chromium/Electron's native Wayland GPU compositor requires
+these interfaces; it can therefore use hardware GL while still presenting its
+window through software buffers. The AHB EGL/Vulkan paths above do not cover
+that consumer yet. An accelerated GLX or EGL probe alone is not evidence of
+accelerated browser window composition.
+
+For the supported paths, no user or distribution configuration is required.
+Inherit the Arlinux session environment and launch the application with its
+normal command line.

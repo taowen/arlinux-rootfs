@@ -3,13 +3,15 @@
 #include <sys/syscall.h>
 #include <sys/wait.h>
 
-/* Opt-in fork/exec mode for Qt's forkfd callback. Our exec adapters allocate
- * memory, use more than forkfd's small child stack, and change loader state.
+/* Isolated fork/exec mode for pidfd-backed vfork callbacks. Our exec adapters
+ * allocate memory, can exceed the caller's child stack, and change loader state.
  * Running them in the parent's VM can corrupt the calling application.
  * fork() also runs libc's atfork handlers; clearing CLONE_VM alone can leave
  * allocator locks owned by a vanished thread in a multithreaded caller.
- * Preserve the pidfd and wait-until-exec/exit behavior. Other clone flag
- * combinations retain their normal semantics in namespace.c. */
+ * Preserve the pidfd and wait-until-exec/exit behavior. Pre-exec memory changes
+ * are deliberately isolated from the parent;
+ * this is an exec compatibility path, not general shared-memory clone support.
+ * Other clone flag combinations retain their semantics in namespace.c. */
 int bionicx_fork_exec(int (*fn)(void *), void *arg, int *pidfd)
 {
     int ready[2];

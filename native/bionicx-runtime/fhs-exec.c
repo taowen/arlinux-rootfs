@@ -281,24 +281,37 @@ static void keep_standard_fds(void) {
 }
 
 static int exec_script(const char *path, char *const arguments[],
-                       int (*execute)(const char *, char *const[])) {
+                       int (*execute)(const char *, char *const[],
+                                      char *const[])) {
     struct guest_exec guest;
     char saved_fn[PATH_MAX];
     int had_fn;
     int result;
     int saved_errno;
+    size_t owned_from = 0;
+    char **merged;
 
     if (prepare_guest_exec(path, arguments, 1, &guest, NULL) != 0)
         return -1;
     had_fn = bionicx_save_execfn(saved_fn);
     bionicx_restore_runtime_environment();
     bionicx_assign_execfn(guest.execfn);
+    /* libc's execv/execvp call hidden execve implementations. Pass the
+     * child's environment explicitly instead of inheriting the parent's
+     * executable identity through those un-interposed calls. */
+    merged = bionicx_with_runtime_environment(environ, &owned_from);
+    if (merged == NULL) {
+        bionicx_restore_execfn(had_fn, saved_fn);
+        free_guest_exec(&guest);
+        return -1;
+    }
     log_exec(guest.run_path, (char *const *)guest.run_args);
     keep_standard_fds();
-    result = execute(guest.run_path, (char *const *)guest.run_args);
+    result = execute(guest.run_path, (char *const *)guest.run_args, merged);
     saved_errno = errno;
     bionicx_restore_execfn(had_fn, saved_fn);
     free_guest_exec(&guest);
+    bionicx_free_runtime_environment(merged, owned_from);
     errno = saved_errno;
     return result;
 }
@@ -427,8 +440,8 @@ static void log_exec(const char *path, char *const arguments[]) {
 }
 
 int execv(const char *path, char *const arguments[]) {
-    static int (*next)(const char *, char *const[]);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "execv");
+    static int (*next)(const char *, char *const[], char *const[]);
+    if (next == NULL) next = dlsym(RTLD_NEXT, "execve");
     char buffer[PATH_MAX];
     const char *actual = bionicx_redirect_path(path, buffer);
     if (actual == NULL) return -1;
@@ -677,8 +690,8 @@ int posix_spawnp(pid_t *pid, const char *path,
 }
 
 int execvp(const char *path, char *const arguments[]) {
-    static int (*next)(const char *, char *const[]);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "execvp");
+    static int (*next)(const char *, char *const[], char *const[]);
+    if (next == NULL) next = dlsym(RTLD_NEXT, "execvpe");
     char buffer[PATH_MAX];
     const char *actual = bionicx_redirect_path(path, buffer);
     if (actual == NULL) return -1;

@@ -89,8 +89,6 @@ echo '== Linux GPU stack =='
 "$repo/tools/build/linux-gpu.sh"
 mesa="$repo/build/linux/mesa/lib"
 hybris="$repo/build/linux/libhybris/install/usr/lib/hybris"
-platform=/usr/lib/aarch64-linux-gnu
-
 declare -A glibc_outputs
 for product in "${pending[@]}"; do
     version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["glibcVersion"])' "distributions/$product/product.json")"
@@ -102,10 +100,6 @@ done
 
 echo '== Product root filesystems =='
 stage="${ARLINUX_PRODUCT_STAGE:-$ARLINUX_CACHE_DIR/products}"; mkdir -p "$stage"
-platform_libs=(libwayland-client.so.0 libwayland-server.so.0 libwayland-egl.so.1
-  libX11-xcb.so.1 libxcb-glx.so.0 libxcb-dri3.so.0 libxcb-present.so.0
-  libxcb-xfixes.so.0 libxcb-sync.so.1 libxcb-randr.so.0 libxcb-shm.so.0
-  libxcb-render.so.0 libxshmfence.so.1)
 for product in "${pending[@]}"; do
     product_dir="$repo/distributions/$product"; rootfs="$stage/$product/rootfs"
     assets="$product_dir/build/assets"; glibc="${glibc_outputs[$product]}"
@@ -124,6 +118,8 @@ if missing:
     raise SystemExit('rootfs seed is missing required files: ' + ', '.join(missing))
 PY
     mkdir -p "$rootfs/usr/lib/arlinux/guest" "$rootfs/usr/lib/arlinux-platform"
+    cp tools/arlinux-app-data/hosted-ime.py tools/arlinux-app-data/org.arlinux.HostedInput.service \
+      "$rootfs/usr/lib/arlinux/"
     cp -a "$product_dir/guest/." "$rootfs/usr/lib/arlinux/guest/"
     cp examples/desk-auto/dump-atspi.py examples/desk-auto/atspi-do.py \
       "$rootfs/usr/lib/arlinux/guest/"
@@ -177,7 +173,7 @@ PY
 
     overlay="$stage/$product/gpu"; deploy="/data/user/0/io.taowen.arlinux/files/rootfs"
     rpath="$deploy/usr/lib/mesa:$deploy/usr/lib/arlinux-platform:$deploy/usr/lib:$deploy/lib"
-    mkdir -p "$overlay/usr/lib/mesa/dri" "$overlay/usr/lib/arlinux-platform" \
+    mkdir -p "$overlay/usr/lib/mesa/dri" \
       "$overlay/usr/lib/arlinux/vulkan" "$overlay/usr/share/vulkan/icd.d"
     cp -a "$mesa"/libEGL.so* "$mesa"/libGLESv2.so* "$mesa"/libGL.so* "$mesa"/libgallium-*.so \
       "$mesa/libvulkan_freedreno.so" "$mesa/libvulkan.so.1" "$overlay/usr/lib/mesa/"
@@ -188,7 +184,6 @@ PY
       ln -sfn libGL.so.1.2.0 "$overlay/usr/lib/mesa/$link"
     done
     cp "$hybris/libVkLayer_hybris_compat.so" "$hybris/VkLayer_hybris_compat.json" "$overlay/usr/lib/arlinux/vulkan/"
-    for library in "${platform_libs[@]}"; do cp -L "$platform/$library" "$overlay/usr/lib/arlinux-platform/$library"; done
     api="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["ICD"]["api_version"])' "$mesa/../share/vulkan/icd.d/freedreno_icd.aarch64.json")"
     python3 - "$overlay/usr/share/vulkan/icd.d/freedreno_icd.json" "$api" <<'PY'
 import json,pathlib,sys

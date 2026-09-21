@@ -645,7 +645,9 @@ char **bionicx_with_runtime_environment(char *const environment[],
 
         if (tmp == NULL || tmp[0] == '\0')
             tmp = bionicx_captured_value("BIONICX_TMPDIR");
-        if (tmp != NULL && append_env(merged, &out, "ARLINUX_A11Y_DIR", tmp) != 0) {
+        const char *a11y_dir = bionicx_env_lookup(environment, "XDG_RUNTIME_DIR");
+        if (a11y_dir == NULL) a11y_dir = tmp;
+        if (a11y_dir != NULL && append_env(merged, &out, "ARLINUX_A11Y_DIR", a11y_dir) != 0) {
             while (out > *owned_from) free(merged[--out]);
             free(merged);
             return NULL;

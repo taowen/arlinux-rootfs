@@ -5,6 +5,8 @@ set -euo pipefail
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo"
 export ARLINUX_CACHE_DIR="${ARLINUX_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/arlinux}"
+host_package="${ARLINUX_HOST_PACKAGE:-io.taowen.arlinux}"
+device_root="/data/user/0/$host_package/files/rootfs"
 rebuild=false
 if [[ "${1:-}" == --rebuild ]]; then rebuild=true; shift; fi
 products=("$@")
@@ -34,6 +36,7 @@ input_id() {
                 | sort -z | xargs -0 -r sha256sum)
         git -C "distributions/$product" submodule status --recursive || true
         printf '%s\n' "$gpu_inputs"
+        printf '%s\n' "$host_package"
         true
     } | sha256sum | cut -d' ' -f1
 }
@@ -94,7 +97,7 @@ for product in "${pending[@]}"; do
     version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["glibcVersion"])' "distributions/$product/product.json")"
     dirs="$(python3 -c 'import json,sys; print(":".join(json.load(open(sys.argv[1]))["libraryDirectories"]))' "distributions/$product/product.json")"
     glibc_outputs[$product]="$(BIONICX_GLIBC_VERSION="$version" \
-      BIONICX_GLIBC_PREFIX="/data/user/0/io.taowen.arlinux/files/rootfs" \
+      BIONICX_GLIBC_PREFIX="$device_root" \
       BIONICX_GLIBC_LIBRARY_DIRS="$dirs" "$repo/tools/build/linux-glibc.sh" | tail -n 1)"
 done
 
@@ -131,7 +134,7 @@ PY
       chmod 755 "$rootfs/usr/lib/arlinux/guest/arlinux-a11y"
     cp "$glibc/ld-linux-aarch64.so.1" "$glibc/libc.so.6" "$glibc/libm.so.6" "$glibc/ldconfig" \
       "$rootfs/usr/lib/arlinux-platform/"
-    python3 tools/relocate-shebangs.py "$rootfs" --device-root "/data/user/0/io.taowen.arlinux/files/rootfs"
+    python3 tools/relocate-shebangs.py "$rootfs" --device-root "$device_root"
     python3 - "$rootfs" <<'PY'
 import os, pathlib, sys
 root = pathlib.Path(sys.argv[1])
@@ -173,7 +176,7 @@ PY
       --exclude=./var/run --exclude=./var/lock -cf - . | zstd -T0 -8 -f -o "$assets/rootfs.tar.zst"
     sha256sum "$assets/rootfs.tar.zst" | cut -d' ' -f1 > "$assets/rootfs-seed-id"
 
-    overlay="$stage/$product/gpu"; deploy="/data/user/0/io.taowen.arlinux/files/rootfs"
+    overlay="$stage/$product/gpu"; deploy="$device_root"
     rpath="$deploy/usr/lib/mesa:$deploy/usr/lib/arlinux-platform:$deploy/usr/lib:$deploy/lib"
     mkdir -p "$overlay/usr/lib/mesa/dri" \
       "$overlay/usr/lib/arlinux/vulkan" "$overlay/usr/share/vulkan/icd.d"

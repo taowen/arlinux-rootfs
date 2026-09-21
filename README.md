@@ -69,9 +69,11 @@ contract and a from-scratch walkthrough. Public reference implementations are:
 - [arlinux-omarchy](https://github.com/taowen/arlinux-omarchy)
 - [arlinux-lxqt](https://github.com/taowen/arlinux-lxqt)
 
-The on-disk archive contract is documented in [PROTOCOL.md](PROTOCOL.md).
-See [Graphics acceleration](docs/GRAPHICS.md) for the default Wayland, X11,
-OpenGL, Vulkan, and AHB presentation paths.
+The [protocol index](PROTOCOL.md) separates the
+[static bundle format](STATIC-PROTOCOL.md) from the
+[Android–Linux runtime contract](RUNTIME-PROTOCOL.md). See
+[Graphics acceleration](docs/GRAPHICS.md) for more detail on the default
+Wayland, X11, OpenGL, Vulkan, and AHB presentation paths.
 
 ## Repository boundaries
 

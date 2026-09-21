@@ -2,6 +2,8 @@
 
 This guide describes the public interface between an Arlinux distribution and
 `arlinux-rootfs`. It deliberately assumes no access to the Android host source.
+The normative contracts are the [static bundle protocol](../STATIC-PROTOCOL.md)
+and [Android–Linux runtime protocol](../RUNTIME-PROTOCOL.md).
 
 ## Design model
 
@@ -121,7 +123,9 @@ The shared builder also packages both GPU overlays: `gpu-qualcomm.tar.zst`
 each with its corresponding `*-id` file. Both are required bundle payloads;
 the host selects the device-appropriate one at installation. Distribution
 authors do not need separate Qualcomm and Mali recipes. See
-[graphics support](GRAPHICS.md) for transport capabilities and limitations.
+[the runtime protocol](../RUNTIME-PROTOCOL.md#graphics-acceleration-and-presentation)
+for the host contract and [graphics support](GRAPHICS.md) for implementation
+details and current limitations.
 
 ## First boot
 
@@ -216,6 +220,10 @@ own process starts. Keep it narrowly scoped by executable name. General Linux
 compatibility fixes belong in `arlinux-rootfs`, not in a distribution policy.
 
 ## Host services and desktop integration
+
+These services implement the dynamic contract summarized here. Refer to the
+[runtime protocol](../RUNTIME-PROTOCOL.md) for normative endpoint, lifetime,
+and message semantics.
 
 - Wayland and Xwayland clients are supported by the host compositor.
 - PulseAudio clients connect to the socket supplied under the host runtime

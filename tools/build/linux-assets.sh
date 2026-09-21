@@ -120,6 +120,8 @@ PY
     mkdir -p "$rootfs/usr/lib/arlinux/guest" "$rootfs/usr/lib/arlinux-platform"
     cp tools/arlinux-app-data/hosted-ime.py tools/arlinux-app-data/org.arlinux.HostedInput.service \
       "$rootfs/usr/lib/arlinux/"
+    install -Dm644 tools/arlinux-app-data/org.arlinux.HostedInput.service \
+      "$rootfs/usr/share/dbus-1/services/org.arlinux.HostedInput.service"
     cp -a "$product_dir/guest/." "$rootfs/usr/lib/arlinux/guest/"
     cp examples/desk-auto/dump-atspi.py examples/desk-auto/atspi-do.py \
       "$rootfs/usr/lib/arlinux/guest/"

@@ -253,7 +253,7 @@ Before publishing a distribution:
 
 1. `./build.sh validate distributions/<id>` succeeds.
 2. `./build.sh build <id>` succeeds from a clean x86-64 Linux checkout.
-3. `./build.sh verify out/<id>.arlinux-rootfs` verifies every payload hash.
+3. `./build.sh verify out/<id>.zip` verifies every payload hash.
 4. The repository contains no host source paths, device serials, credentials,
    private submodules, or Windows-specific build commands.
 5. A fresh instance completes first boot, and rerunning first boot is safe.

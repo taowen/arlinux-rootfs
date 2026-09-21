@@ -41,7 +41,7 @@ cd arlinux-rootfs
 ./build.sh doctor
 ./build.sh list
 ./build.sh build debian
-./build.sh verify out/debian.arlinux-rootfs
+./build.sh verify out/debian.zip
 ```
 
 Use `./build.sh build` to build every checked-out distribution. Build state is

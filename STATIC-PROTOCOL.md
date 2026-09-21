@@ -1,7 +1,7 @@
 # Static bundle protocol v1
 
 This document defines the persistent, host-independent contract of an
-`.arlinux-rootfs` distribution bundle. Runtime communication between the
+`.zip` distribution bundle. Runtime communication between the
 installed guest and the Android host is defined separately in
 [RUNTIME-PROTOCOL.md](RUNTIME-PROTOCOL.md).
 

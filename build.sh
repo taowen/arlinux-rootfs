@@ -30,7 +30,7 @@ case "$command" in
     git submodule update --init --recursive
     ./tools/build/linux-assets.sh "${selected[@]}"
     for product in "${selected[@]}"; do
-      python3 tools/bundle.py pack "distributions/$product" "out/$product.arlinux-rootfs"
+      python3 tools/bundle.py pack "distributions/$product" "out/$product.zip"
     done
     ;;
   doctor)

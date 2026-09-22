@@ -40,6 +40,21 @@ shutil.copyfile(common / 'android-statx.c', source / 'misc/android-statx.c')
 shutil.copyfile(common / 'android-socket.c', source / 'misc/android-socket.c')
 shutil.copyfile(common / 'android-link.c', source / 'misc/android-link.c')
 shutil.copyfile(common / 'android-namespace.c', source / 'misc/android-namespace.c')
+# The inherited fchmodat fallback predates AT_EMPTY_PATH. Keep one descriptor
+# pinned for the existing /proc/self/fd implementation, including O_PATH fds;
+# never follow a symlink descriptor to change its target's permissions.
+replace('sysdeps/unix/sysv/linux/fchmodat.c',
+        '  if (flag != AT_SYMLINK_NOFOLLOW)',
+        '  if (flag & ~(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH))')
+replace('sysdeps/unix/sysv/linux/fchmodat.c',
+        '  int pathfd = __openat_nocancel (fd, file,\n\t\t\t\t  O_PATH | O_NOFOLLOW | O_CLOEXEC);',
+        '''  int pathfd;
+  if ((flag & AT_EMPTY_PATH) && file[0] == '\\0' && fd != AT_FDCWD)
+    pathfd = INLINE_SYSCALL_CALL (fcntl, fd, F_DUPFD_CLOEXEC, 0);
+  else
+    pathfd = __openat_nocancel (fd,
+      (flag & AT_EMPTY_PATH) && file[0] == '\\0' ? "." : file,
+      O_PATH | O_CLOEXEC | ((flag & AT_SYMLINK_NOFOLLOW) ? O_NOFOLLOW : 0));''')
 replace('misc/Makefile', 'include ../Rules', 'routines += android-syscall android-exec android-trap android-statx android-socket android-link android-namespace\n\ninclude ../Rules')
 clone = source / 'sysdeps/unix/sysv/linux/aarch64/clone.S'
 text = clone.read_text().replace('__clone', '__arlinux_kernel_clone')

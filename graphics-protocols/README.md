@@ -3,10 +3,13 @@
 This package is the wire definition shared by Arlinux Xwayland, anlabwc,
 Mesa's Arlinux WSI patch and the libhybris Wayland/X11 clients.
 
+This directory contains graphics buffer transport definitions only, not the
+complete host/guest protocol (input, accessibility, lifecycle or other services).
+
 - `include/arlinux/tawc-dri.h`: TAWC-DRI 0.4 request/reply/XGE layouts, constants
   and compile-time wire-size checks. Xwayland's `tawcdriproto.h` only aliases
   these types to X server names.
-- `wayland-android.xml`: android_wlegl v2. Each consumer generates its own
+- `wayland-android.xml`: android_wlegl v3. Each consumer generates its own
   client/server bindings from this XML; none vendors a second XML copy.
 
 Set the target pkg-config search path to this directory. Meson consumers use

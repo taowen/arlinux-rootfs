@@ -55,7 +55,7 @@ seed_rootfs() (
 
 input_id() {
     local product="$1"
-    local inputs=(runtime protocols examples tools/build tools/arlinux-app-data)
+    local inputs=(runtime graphics-protocols examples tools/build tools/arlinux-app-data)
     {
         git ls-files -s -- "${inputs[@]}"
         git diff --binary -- "${inputs[@]}"
@@ -179,13 +179,13 @@ PY
     cp "$teapot/teapot-glx" "$teapot/teapot-egl" "$assets/arlinux/"
     cp tools/arlinux-app-data/accessibility-session.sh "$assets/arlinux/"
     cp -a tools/arlinux-app-data/fonts "$assets/arlinux/fonts"
-    python3 - "$product_dir" "$assets" "$repo/profiles/xterm.json" <<'PY'
+    python3 - "$product_dir" "$assets" <<'PY'
 import json, pathlib, sys
-product, assets, fallback = map(pathlib.Path, sys.argv[1:])
+product, assets = map(pathlib.Path, sys.argv[1:])
 config = json.loads((product/'product.json').read_text())
-profile_file = product/'profile.json'; profile_file = profile_file if profile_file.is_file() else fallback
+profile_file = product/'profile.json'
 profile = json.loads(profile_file.read_text()); profile['launch']['environment'].update(config.get('environment',{}))
-(assets/'xterm.json').write_text(json.dumps(profile,indent=2)+'\n')
+(assets/'profile.json').write_text(json.dumps(profile,indent=2)+'\n')
 (assets/'guest.properties').write_text('distributionId='+product.name+'\nrequiredFiles='+','.join(config['requiredFiles'])+'\nlibraryDirectories='+','.join(config['libraryDirectories'])+'\n')
 PY
     tar -C "$rootfs" --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \

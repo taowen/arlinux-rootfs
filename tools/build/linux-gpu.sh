@@ -15,7 +15,7 @@ gpu_id="$({
     git -C "$repo/third_party/libhybris" rev-parse HEAD
     git -C "$repo/third_party/android-headers" rev-parse HEAD
     sha256sum "$repo/tools/build/linux-gpu.sh" "$repo/tools/build/linux-aarch64.ini"
-    find "$repo/protocols" -type f -print0 | sort -z | xargs -0 sha256sum
+    find "$repo/graphics-protocols" -type f -print0 | sort -z | xargs -0 sha256sum
 } | sha256sum | cut -d' ' -f1)"
 gpu_id_file="$repo/build/linux/gpu.inputs.sha256"
 
@@ -38,6 +38,7 @@ build_mesa() {
     mkdir -p "$mesa_build" "$mesa_install"
     local setup=(meson setup "$mesa_build" "$mesa_source"
         --cross-file "$repo/tools/build/linux-aarch64.ini"
+        -Dpkg_config_path="$repo/graphics-protocols"
         --prefix="$mesa_install" --libdir=lib --buildtype=release
         -Dauto_features=disabled -Dgallium-drivers=zink
         -Dvulkan-drivers=freedreno -Dfreedreno-kmds=kgsl
@@ -47,8 +48,8 @@ build_mesa() {
         -Dllvm=disabled -Dzstd=disabled -Dshader-cache=false
         -Dxmlconfig=enabled -Dexpat=enabled -Dzlib=enabled
         -Dbuild-tests=false -Dtools= -Dvideo-codecs=)
-    [[ -f "$mesa_build/build.ninja" ]] && setup+=(--reconfigure)
-    PKG_CONFIG_PATH="$repo/protocols" "${setup[@]}"
+    [[ -f "$mesa_build/build.ninja" ]] && setup+=(--reconfigure --clearcache)
+    PKG_CONFIG_PATH="$repo/graphics-protocols" "${setup[@]}"
     ninja -C "$mesa_build" -j"$jobs" install
     cp -L /usr/lib/aarch64-linux-gnu/libvulkan.so.1 "$mesa_install/lib/libvulkan.so.1"
 }
@@ -61,7 +62,7 @@ build_hybris() {
     git -C "$repo/third_party/libhybris" archive HEAD | tar -xf - -C "$source"
     git -C "$repo/third_party/android-headers" archive HEAD | tar -xf - -C "$headers"
     pushd "$source/hybris" >/dev/null
-    export PKG_CONFIG_PATH="$repo/protocols"
+    export PKG_CONFIG_PATH="$repo/graphics-protocols"
     export PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig
     export CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++
     export AR=aarch64-linux-gnu-ar STRIP=aarch64-linux-gnu-strip

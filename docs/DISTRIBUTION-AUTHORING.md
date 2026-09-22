@@ -154,7 +154,9 @@ desktop and its toolkit libraries on one package-manager-owned ABI generation.
 
 ## Launch profile
 
-`profile.json` follows [`schemas/profile.schema.json`](../schemas/profile.schema.json).
+Every distribution must provide `profile.json`, following
+[`schemas/profile.schema.json`](../schemas/profile.schema.json). It is packaged
+under the same name. There is no framework-provided fallback desktop.
 Paths use host-expanded variables such as `${RUNTIME}`, `${HOME}`, `${FILES}`,
 and `${DISPLAY}`. A Wayland desktop normally sets:
 

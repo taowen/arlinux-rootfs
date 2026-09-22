@@ -83,10 +83,11 @@ def validate(directory: Path) -> None:
     if not guest.is_dir() or not (guest / "first-boot.sh").is_file():
         fail("guest/first-boot.sh is required")
     profile = directory / "profile.json"
-    if profile.exists():
-        data = load_object(profile)
-        if data.get("schemaVersion") != 3 or not isinstance(data.get("launch"), dict):
-            fail("profile.json must be a schemaVersion 3 launch profile")
+    if not profile.is_file():
+        fail("profile.json is required")
+    data = load_object(profile)
+    if data.get("schemaVersion") != 3 or not isinstance(data.get("launch"), dict):
+        fail("profile.json must be a schemaVersion 3 launch profile")
 
     print(f"OK distribution {identifier}: {product['name']} (glibc {glibc})")
 

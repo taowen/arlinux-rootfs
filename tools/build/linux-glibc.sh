@@ -69,7 +69,9 @@ mkdir -p "$cache_dir"
 definition_hash="$({
     printf '%s\n' "$glibc_version" "$glibc_sha256" "$package_commit" \
         "$source_prefix" "$target_prefix" "$library_dirs"
-    sha256sum "$recipe"/* "$repo_dir/runtime/glibc/common/"* "$0" | cut -d ' ' -f1
+    find "$recipe" "$repo_dir/runtime/glibc/common" -maxdepth 1 -type f -print0 \
+      | sort -z | xargs -0 sha256sum | cut -d ' ' -f1
+    sha256sum "$0" | cut -d ' ' -f1
 } | sha256sum | cut -c1-16)"
 result_dir="$cache_dir/android-glibc-$definition_hash"
 exec 9>"$cache_dir/android-glibc-$definition_hash.lock"

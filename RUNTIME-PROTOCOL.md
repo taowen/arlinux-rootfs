@@ -77,9 +77,9 @@ Accelerated Wayland and X11 presentation share an Android Hardware Buffer
 4. Buffer release allows the producer to reuse it.
 
 Native Wayland clients use `android_wlegl` version 3, defined by
-[`protocols/wayland-android.xml`](protocols/wayland-android.xml). X11 EGL, GLX,
+[`graphics-protocols/wayland-android.xml`](graphics-protocols/wayland-android.xml). X11 EGL, GLX,
 and Vulkan clients use TAWC-DRI 0.4, defined by
-[`protocols/include/arlinux/tawc-dri.h`](protocols/include/arlinux/tawc-dri.h),
+[`graphics-protocols/include/arlinux/tawc-dri.h`](graphics-protocols/include/arlinux/tawc-dri.h),
 through Xwayland; Xwayland forwards the same native handle to `android_wlegl`.
 
 The current protocols do not carry explicit acquire or release fences.

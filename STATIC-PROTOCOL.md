@@ -1,4 +1,4 @@
-# Static bundle protocol v1
+# Static bundle protocol v2
 
 This document defines the persistent, host-independent contract of an
 `.zip` distribution bundle. Runtime communication between the
@@ -10,7 +10,7 @@ installed guest and the Android host is defined separately in
 A bundle is a ZIP64 archive whose payload members are stored without ZIP
 compression. `manifest.json` is the only top-level metadata source. It contains:
 
-- `protocol`: the integer `1`;
+- `protocol`: the integer `2`;
 - `distributionId`: a stable `[a-z][a-z0-9-]{0,63}` identifier;
 - `name`: the display name;
 - `hostPackage`: `io.taowen.arlinux`;
@@ -27,7 +27,7 @@ and signing policy.
 
 ## Required payloads
 
-Protocol 1 requires:
+Protocol 2 requires:
 
 ```text
 rootfs.tar.zst
@@ -37,7 +37,7 @@ gpu-qualcomm-id
 gpu-generic.tar.zst
 gpu-generic-id
 guest.properties
-xterm.json
+profile.json
 bionicx/lib/ld-linux-aarch64.so.1
 bionicx/lib/libc.so.6
 bionicx/lib/libm.so.6
@@ -46,7 +46,7 @@ bionicx/sudo
 ```
 
 `rootfs.tar.zst` contains the distribution-owned AArch64 userspace and
-`/usr/lib/arlinux/guest/first-boot.sh`. `xterm.json` follows launch-profile
+`/usr/lib/arlinux/guest/first-boot.sh`. `profile.json` follows launch-profile
 schema 3. The two GPU overlays let the host select Qualcomm Turnip or the
 generic Android Vulkan/libhybris path without requiring device-specific
 distribution builds.

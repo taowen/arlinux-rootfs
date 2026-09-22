@@ -5,6 +5,34 @@ recipe. `tools/build/linux-glibc.sh` builds the loader, libc, libm and ldconfig
 for the bundle's host package. Distribution applications keep their standard
 glibc ABI; they do not link against a separate Arlinux API.
 
+## Source ownership
+
+This directory is a source recipe, not a standalone glibc Git fork. The build
+verifies a GNU glibc release archive, applies patches from a pinned
+`termux-pacman/glibc-packages` commit, then installs the Arlinux adaptations.
+`2.41/recipe.env` and `2.43/recipe.env` pin these inputs. The completed cache
+contains the assembled `source/` tree and an `output/BUILD-INFO` manifest.
+
+Arlinux currently integrates changes in three forms: small unified patches,
+shared C implementations, and checked upstream-source edits in
+`common/install-syscalls.py` and `tools/build/linux-glibc.sh`. Moving a patch
+into that Python script would not eliminate its maintenance cost. A future
+Git fork can represent these changes as commits, but must also absorb the
+pinned Termux changes; copying only the files in `common/` is insufficient.
+
+The three shared patch files still have distinct runtime responsibilities:
+
+| Patch | Responsibility |
+| --- | --- |
+| `zz-arlinux-loader-search-path.patch` | Relocate FHS library names and RPATH/RUNPATH without losing the calling object's search context. |
+| `zz-arlinux-ldconfig-prefix.patch` | Make package-manager cache generation use physical guest paths, including `DPKG_ROOT` and Android path aliases. |
+| `zz-bionicx-robust-fallback.patch` | Stop assuming kernel robust-list registration and reject process-shared/priority-inheritance modes that cannot be implemented correctly. |
+
+The version directories link to those shared patches; they are not duplicate
+copies. Version-specific patches fix Android group membership and, for 2.43,
+the fortified syslog export. Removing any of these requires replacing its
+behavior or verifying that the selected upstream inputs already provide it.
+
 glibc owns loader search paths, thread initialization, filesystem syscall
 translation, process execution, identity queries, IPC and kernel fallbacks.
 There is no compatibility preload library or libc symbol-interposition layer.
@@ -20,6 +48,10 @@ GNU dynamic executables enter the bundled loader; Android and static
 executables keep their native execution path. Shebang interpreters use the
 same guest path translation.
 
+Bundle assembly preserves distribution shebangs and absolute symlink targets.
+The Android launcher's first-exec adapter selects the guest interpreter without
+editing the script; glibc owns subsequent execution and pathname resolution.
+
 Execution preparation uses stack-owned scratch, not malloc or persistent
 mappings. The upstream spawn stack reserves the scratch area and the actual
 argument/environment vectors, so shared-VM children do not leak allocations
@@ -32,9 +64,10 @@ launcher, not recreated by libc constructors.
 
 `common/android-syscall.c` translates guest filesystem paths immediately before
 the AArch64 kernel call. Public functions, hidden libc calls and `syscall()`
-therefore use the same translation. The loader keeps its separate early-startup
-path handling. Translation uses bounded stack storage and does not allocate,
-read environment variables or call the dynamic loader.
+therefore use the same translation. The loader and libc share
+`common/android-path.h` for FHS and symlink lookup; the loader uses it directly
+before libc policy is initialized. Translation uses bounded stack storage and
+does not allocate, read environment variables or call the dynamic loader.
 
 `common/install-syscalls.py` installs the boundary in both supported upstream
 versions. It validates each source edit and fails if the upstream contract
@@ -45,6 +78,11 @@ Directory creation, renaming, temporary-file APIs and executable procfs aliases
 use that boundary directly. Pathname Unix sockets use the same translation;
 abstract socket names are unchanged. Long physical socket paths use a temporary
 directory descriptor, released on return or thread cancellation.
+
+If Android denies `/proc/version`, the boundary supplies an app-private kernel
+identity line derived from `uname`. It is a compatibility view, not a byte-exact
+copy of the inaccessible procfs file or a bypass of SELinux. On systems where
+the real file is readable, it remains authoritative.
 
 Path lookup resolves guest absolute symlink targets, including intermediate
 directories. Link contents stay unchanged; no-follow operations still act on

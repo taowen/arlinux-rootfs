@@ -17,6 +17,22 @@ def replace(path, before, after):
 
 
 shutil.copyfile(common / 'android-syscall.h', source / 'include/android-syscall.h')
+shutil.copyfile(common / 'android-path.h', source / 'include/android-path.h')
+# rtld cannot call libc's initialized policy. It uses the same allocation-free
+# pathname resolver directly, so alternatives/symlinked DSOs work at startup.
+replace('elf/dl-load.c', '#include <sysdep.h>',
+        '#include <sysdep.h>\n#include <android-path.h>')
+replace('elf/dl-load.c', '    fd = __open64_nocancel (name, O_RDONLY | O_CLOEXEC);', '''    {
+      char rooted[4096], resolved[4096];
+      long path = (long) name;
+      long result = android_root_path (&path, rooted);
+      if (result == 0)
+        result = android_follow_links (AT_FDCWD, &path, resolved, 1, android_root_path);
+      if (result < 0)
+        __set_errno (-result);
+      else
+        fd = __open64_nocancel ((const char *) path, O_RDONLY | O_CLOEXEC);
+    }''')
 shutil.copyfile(common / 'android-syscall.c', source / 'misc/android-syscall.c')
 shutil.copyfile(common / 'android-exec.c', source / 'misc/android-exec.c')
 shutil.copyfile(common / 'android-trap.c', source / 'misc/android-trap.c')

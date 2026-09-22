@@ -62,13 +62,13 @@ input_id() {
         git ls-files --others --exclude-standard -z -- \
             "${inputs[@]}" \
             | sort -z | xargs -0 -r sha256sum
-        git -C "distributions/$product" ls-files -s guest native tools \
+        git -C "distributions/$product" ls-files -s guest tools \
             product.json profile.json rootfs.lock.json
-        git -C "distributions/$product" diff --binary -- guest native tools \
+        git -C "distributions/$product" diff --binary -- guest tools \
             product.json profile.json rootfs.lock.json
         (cd "distributions/$product" &&
             git ls-files --others --exclude-standard -z -- \
-                guest native tools product.json profile.json rootfs.lock.json \
+                guest tools product.json profile.json rootfs.lock.json \
                 | sort -z | xargs -0 -r sha256sum)
         git -C "distributions/$product" submodule status --recursive || true
         printf '%s\n' "$gpu_inputs"
@@ -154,17 +154,11 @@ PY
       chmod 755 "$rootfs/usr/lib/arlinux/guest/arlinux-a11y"
     cp "$glibc/ld-linux-aarch64.so.1" "$glibc/libc.so.6" "$glibc/libm.so.6" "$glibc/ldconfig" \
       "$rootfs/usr/lib/arlinux-platform/"
-    python3 tools/relocate-shebangs.py "$rootfs" --device-root "$device_root"
     python3 - "$rootfs" <<'PY'
 import os, pathlib, sys
 root = pathlib.Path(sys.argv[1])
-for directory, dirs, files in os.walk(root, followlinks=False):
-    for name in dirs + files:
-        path = pathlib.Path(directory) / name
-        if path.is_symlink():
-            target = os.readlink(path)
-            if target.startswith('/') and target.split('/')[1] not in ('proc','sys','dev'):
-                path.unlink(); path.symlink_to(os.path.relpath(root / target.lstrip('/'), path.parent))
+# Keep package-owned shebangs and symlink contents unchanged. Guest libc
+# resolves Linux paths; rewriting files here creates a second path policy.
 for name, contents in [('etc/resolv.conf','nameserver 1.1.1.1\n'), ('etc/machine-id','')]:
     path = root / name
     if path.is_symlink(): path.unlink()

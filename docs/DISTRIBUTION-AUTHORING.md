@@ -45,8 +45,6 @@ my-linux/
 ├── rootfs.lock.json
 ├── guest/
 │   └── first-boot.sh
-├── native/
-│   └── product-policy.h
 └── tools/
     ├── seed.sh
     └── post-seed.sh        # optional
@@ -204,20 +202,17 @@ the shared filesystem and process integration, including libc-internal calls.
 Applications should launch with their usual commands; graphics defaults come
 from the runtime described in [graphics support](GRAPHICS.md).
 
-## Native compatibility policy
+## Compatibility boundary
 
-`native/product-policy.h` is compiled into the bionicx runtime. Most
-distributions should start with the no-op policy:
+Distributions do not provide native compatibility hooks. Filesystem paths,
+symlinks and child execution are handled by the shared glibc runtime. Preserve
+package-owned scripts and symlink contents instead of rewriting them for the
+Android installation directory. The Android launcher handles the first guest
+execution before glibc is active.
 
-```c
-#pragma once
-#define ARLINUX_PRODUCT_ENVIRONMENT
-static inline void arlinux_product_environment(void) {}
-```
-
-Only add policy when a package manager requires environment setup before its
-own process starts. Keep it narrowly scoped by executable name. General Linux
-compatibility fixes belong in `arlinux-rootfs`, not in a distribution policy.
+Use the package manager's documented configuration for installation policy.
+Graphics transport and desktop accessibility belong to their respective
+components, not to libc or process-name-specific distribution hooks.
 
 ## Host services and desktop integration
 

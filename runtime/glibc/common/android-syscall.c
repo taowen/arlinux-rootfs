@@ -14,6 +14,8 @@
 #include <sys/types.h>
 #include <sys/vfs.h>
 #include <linux/magic.h>
+#include <android-path.h>
+#include <sys/utsname.h>
 
 /* The execution profile is immutable for a process. Keep it after clearenv;
    nested exec receives the profile from the process-launch policy. This never
@@ -63,16 +65,48 @@ initialize_identity (void)
     else ++item;
 }
 
-static int
-under (const char *path, const char *directory)
+/* Expose kernel identity already available through uname when SELinux denies
+   /proc/version. Publish complete contents atomically for concurrent readers. */
+static long
+proc_version (const char *path, char buffer[4096])
 {
-  unsigned int n = 0;
-  while (directory[n])
-    {
-      if (directory[n] != path[n]) return 0;
-      ++n;
-    }
-  return path[n] == '/' || path[n] == 0;
+  if (strcmp (path, "/proc/version")) return 0;
+  long native = INTERNAL_SYSCALL_CALL (openat, AT_FDCWD, path, O_RDONLY | O_CLOEXEC, 0);
+  if (native >= 0)
+    { INTERNAL_SYSCALL_CALL (close, native); return 0; }
+  if (native != -EACCES && native != -EPERM) return 0;
+  const char root[] = _PATH_TMP;
+  size_t length = sizeof root - 1;
+  if (length + sizeof ("arlinux-proc-version") > 4096) return -ENAMETOOLONG;
+  memcpy (buffer, root, length);
+  memcpy (buffer + length, "arlinux-proc-version", sizeof ("arlinux-proc-version"));
+  struct utsname info;
+  long result = INTERNAL_SYSCALL_CALL (uname, &info);
+  if (result < 0) return result;
+  char text[sizeof info + 32] = "Linux version ";
+  strcat (text, info.release);
+  strcat (text, " ");
+  strcat (text, info.version);
+  strcat (text, "\n");
+  char temporary[4096];
+  strcpy (temporary, buffer);
+  size_t out = strlen (temporary);
+  temporary[out++] = '.';
+  unsigned long tid = INTERNAL_SYSCALL_CALL (gettid);
+  do { temporary[out++] = "0123456789abcdef"[tid & 15]; tid >>= 4; } while (tid);
+  temporary[out] = 0;
+  long fd = INTERNAL_SYSCALL_CALL (openat, AT_FDCWD, temporary,
+                                   O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
+  if (fd < 0) return fd;
+  size_t size = strlen (text);
+  long wrote = INTERNAL_SYSCALL_CALL (write, fd, text, size);
+  long closed = INTERNAL_SYSCALL_CALL (close, fd);
+  result = wrote != size ? (wrote < 0 ? wrote : -EIO) : closed;
+  if (result == 0)
+    result = INTERNAL_SYSCALL_CALL (renameat, AT_FDCWD, temporary, AT_FDCWD, buffer);
+  if (result < 0)
+    { INTERNAL_SYSCALL_CALL (unlinkat, AT_FDCWD, temporary, 0); return result; }
+  return 1;
 }
 
 static long
@@ -85,106 +119,10 @@ translate (long *argument, char *buffer)
   if (namespace_path) { *argument = (long) buffer; return 0; }
   if (process_executable (path))
     { *argument = (long) executable; return 0; }
-  const char *suffix = path;
-  const char *extra = "";
-  if (under (path, "/dev/shm"))
-    {
-      extra = "/tmp/dev-shm";
-      suffix = path + 8;
-    }
-  else if (!(under (path, "/usr") || under (path, "/bin") ||
-             under (path, "/sbin") || under (path, "/lib") ||
-             under (path, "/lib64") || under (path, "/etc") ||
-             under (path, "/opt") || under (path, "/var") ||
-             under (path, "/tmp") || under (path, "/run") ||
-             path[1] == 0 || (path[1] == '.' && path[2] == 0)))
-    return 0;
-  /* _PATH_TMP is the configured app-private prefix followed by /tmp/. */
-  const char root[] = _PATH_TMP;
-  unsigned int out = 0;
-  for (; out < sizeof (root) - 6; ++out) buffer[out] = root[out];
-  for (unsigned int i = 0; extra[i]; ++i) buffer[out++] = extra[i];
-  if (extra[0])
-    {
-      buffer[out] = 0;
-      long result = INTERNAL_SYSCALL_CALL (mkdirat, AT_FDCWD, buffer, 01777);
-      if (result < 0 && result != -EEXIST) return result;
-    }
-  for (unsigned int i = 0;; ++i)
-    {
-      if (out == 4095) return -ENAMETOOLONG;
-      buffer[out++] = suffix[i];
-      if (suffix[i] == 0) break;
-    }
-  *argument = (long) buffer;
-  return 0;
-}
-
-/* Resolve links component by component: the kernel cannot translate a guest
-   absolute target encountered halfway through a pathname. Keep link contents
-   unchanged, and leave the final component alone for no-follow operations.
-   Raw calls avoid recursion; this is path compatibility, not confinement. */
-static long
-follow_links (int directory, long *argument, char output[4096], int final)
-{
-  const char *source = (const char *) *argument;
-  if (!source || !*source) return 0;
-  char path[4096], target[4096], mapped[4096];
-  size_t length = strnlen (source, sizeof path);
-  if (length == sizeof path) return -ENAMETOOLONG;
-  memcpy (path, source, length + 1);
-  unsigned links = 0;
-  for (size_t end = path[0] == '/' ? 1 : 0; path[end]; )
-    {
-      while (path[end] == '/') ++end;
-      if (!path[end]) break;
-      size_t begin = end;
-      while (path[end] && path[end] != '/') ++end;
-      if (!path[end] && !final) break;
-      char separator = path[end];
-      path[end] = 0;
-      long size = INTERNAL_SYSCALL_CALL (readlinkat, directory, path, target, 4095);
-      int magic = 0;
-      if (size >= 0)
-        {
-          /* procfs links are kernel handles, not pathname substitutions:
-             pipe:[N], anon_inode:[N] and deleted files must keep their fd. */
-          long fd = INTERNAL_SYSCALL_CALL (openat, directory, path,
-                                          O_PATH | O_NOFOLLOW | O_CLOEXEC, 0);
-          if (fd >= 0)
-            {
-              struct statfs fs;
-              magic = INTERNAL_SYSCALL_CALL (fstatfs, fd, &fs) == 0 &&
-                      fs.f_type == PROC_SUPER_MAGIC;
-              INTERNAL_SYSCALL_CALL (close, fd);
-            }
-        }
-      path[end] = separator;
-      if (magic) continue;
-      if (size == -EINVAL) continue; /* Ordinary directory or file. */
-      if (size < 0) break; /* Let the actual operation report its own error. */
-      if (size >= 4095) return -ENAMETOOLONG;
-      target[size] = 0;
-      long translated = (long) target;
-      if (target[0] == '/')
-        {
-          long result = translate (&translated, mapped);
-          if (result < 0) return result;
-          /* Keep native absolute/magic links under kernel control. */
-          if (translated == (long) target) continue;
-          begin = 0;
-        }
-      if (++links > 40) return -ELOOP;
-      size_t replacement = strlen ((char *) translated);
-      size_t rest = strlen (path + end);
-      if (begin + replacement + rest >= sizeof path) return -ENAMETOOLONG;
-      memmove (path + begin + replacement, path + end, rest + 1);
-      memcpy (path + begin, (char *) translated, replacement);
-      end = path[0] == '/' ? 1 : 0;
-    }
-  strcpy (output, path);
-  *argument = (long) output;
-  return 0;
+  long synthetic = proc_version (path, buffer);
+  if (synthetic < 0) return synthetic;
+  if (synthetic) { *argument = (long) buffer; return 0; }
+  return android_root_path (argument, buffer);
 }
 
 long
@@ -226,12 +164,12 @@ __arlinux_path_prepare (long number, long arguments[6], char storage[8192])
               (*(unsigned long *) arguments[2] & (O_CREAT | O_EXCL)) != (O_CREAT | O_EXCL);
       break;
     }
-  result = follow_links (first && number != 27 ? arguments[first - 1] : AT_FDCWD,
-                         &arguments[first], storage, final);
+  result = android_follow_links (first && number != 27 ? arguments[first - 1] : AT_FDCWD,
+                         &arguments[first], storage, final, translate);
   if (result < 0 || second < 0) return result;
   result = translate (&arguments[second], storage + 4096);
   if (result < 0) return result;
-  return follow_links (arguments[second - 1], &arguments[second], storage + 4096, 0);
+  return android_follow_links (arguments[second - 1], &arguments[second], storage + 4096, 0, translate);
 }
 
 long

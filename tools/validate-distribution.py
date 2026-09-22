@@ -82,9 +82,6 @@ def validate(directory: Path) -> None:
     guest = directory / "guest"
     if not guest.is_dir() or not (guest / "first-boot.sh").is_file():
         fail("guest/first-boot.sh is required")
-    policy = directory / "native/product-policy.h"
-    if not policy.is_file():
-        fail("native/product-policy.h is required")
     profile = directory / "profile.json"
     if profile.exists():
         data = load_object(profile)

@@ -38,7 +38,9 @@ void teapot_gate_phase(const char *name)
     }
     /* Pause only the test's main loop, never vendor driver worker threads. */
     const struct timespec interval = { .tv_sec = 0, .tv_nsec = 100000000 };
-    for (int attempt = 0; attempt < 300; attempt++) {
+    /* Android screencap can exceed 30 seconds while the GPU matrix is under
+     * load. Keep this in sync with the host/device evidence handshake. */
+    for (int attempt = 0; attempt < 900; attempt++) {
         if (access(ack, F_OK) == 0) {
             unlink(ack);
             return;

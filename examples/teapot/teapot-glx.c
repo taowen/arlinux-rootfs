@@ -3,6 +3,7 @@
 
 #include <GL/gl.h>
 #include <GL/glx.h>
+#include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
@@ -170,6 +171,18 @@ static Window make_window(Display *dpy, int screen, Visual *visual, int depth)
                          &attrs);
     XSizeHints hints;
     Atom wm_delete;
+
+    /* A normal top-level is intentionally subject to a tiling compositor's
+     * layout policy, so XResizeWindow is only advisory there. Use the
+     * standard EWMH dialog type for this resize contract: it remains a
+     * managed application window, but compositors conventionally float it. */
+    {
+        Atom type = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False);
+        Atom dialog = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE_DIALOG", False);
+
+        XChangeProperty(dpy, win, type, XA_ATOM, 32, PropModeReplace,
+                        (unsigned char *)&dialog, 1);
+    }
 
     memset(&hints, 0, sizeof(hints));
     hints.flags = USPosition | PPosition | PSize;

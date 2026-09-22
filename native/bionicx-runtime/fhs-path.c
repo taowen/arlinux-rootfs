@@ -275,90 +275,6 @@ static void apply_dev_shm_mode(const char *path, mode_t *mode) {
     *mode |= S_ISVTX | 0777;
 }
 
-static const char *redirect_dev_shm(const char *path, char buffer[PATH_MAX]) {
-    if (path == NULL || (strcmp(path, "/dev/shm") != 0 &&
-            strncmp(path, "/dev/shm/", 9) != 0))
-        return NULL;
-    const char *tmp = bionicx_captured_tmpdir();
-    if (tmp == NULL) tmp = bionicx_getenv("BIONICX_TMPDIR");
-    if (tmp == NULL || tmp[0] != '/') return path;
-    char directory[PATH_MAX];
-    if (snprintf(directory, PATH_MAX, "%s/dev-shm", tmp) >= PATH_MAX) {
-        errno = ENAMETOOLONG;
-        return NULL;
-    }
-    static int (*real_mkdir)(const char *, mode_t);
-    static int (*real_chmod)(const char *, mode_t);
-    if (real_mkdir == NULL) real_mkdir = dlsym(RTLD_NEXT, "mkdir");
-    if (real_chmod == NULL) real_chmod = dlsym(RTLD_NEXT, "chmod");
-    if (real_mkdir(directory, 01777) != 0 && errno != EEXIST) return path;
-    (void)real_chmod(directory, 01777);
-    if (snprintf(buffer, PATH_MAX, "%s%s", directory, path + 8) >= PATH_MAX) {
-        errno = ENAMETOOLONG;
-        return NULL;
-    }
-    return buffer;
-}
-
-/* /run maps to $BIONICX_TMPDIR/run. Debian postinsts (adduser's
- * /run/adduser lock) assume that directory already exists, like systemd's
- * tmpfs /run. Create the backing dir on first rewrite. */
-static void ensure_run_backing(const char *tmpdir)
-{
-    static int (*real_mkdir)(const char *, mode_t);
-    char directory[PATH_MAX];
-    if (tmpdir == NULL || tmpdir[0] != '/')
-        return;
-    if (snprintf(directory, sizeof(directory), "%s/run", tmpdir) >=
-            (int)sizeof(directory))
-        return;
-    if (real_mkdir == NULL)
-        real_mkdir = dlsym(RTLD_NEXT, "mkdir");
-    if (real_mkdir != NULL)
-        (void)real_mkdir(directory, 0755);
-}
-
-static int shm_guest_path(const char *name, char path[PATH_MAX]) {
-    if (name == NULL || name[0] == '\0') {
-        errno = EINVAL;
-        return -1;
-    }
-    const char *n = name;
-    while (*n == '/') ++n;
-    if (*n == '\0' || strchr(n, '/') != NULL) {
-        errno = EINVAL;
-        return -1;
-    }
-    if (snprintf(path, PATH_MAX, "/dev/shm/%s", n) >= PATH_MAX) {
-        errno = ENAMETOOLONG;
-        return -1;
-    }
-    return 0;
-}
-
-int shm_open(const char *name, int oflag, mode_t mode) {
-    static int (*next)(const char *, int, ...);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "open");
-    char linux_path[PATH_MAX];
-    if (shm_guest_path(name, linux_path) != 0) return -1;
-    char buffer[PATH_MAX];
-    const char *actual = bionicx_redirect_path(linux_path, buffer);
-    if (actual == NULL) return -1;
-    oflag |= O_NOFOLLOW | O_CLOEXEC;
-    return (oflag & O_CREAT) ? next(actual, oflag, mode) : next(actual, oflag);
-}
-
-int shm_unlink(const char *name) {
-    static int (*next)(const char *);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "unlink");
-    char linux_path[PATH_MAX];
-    if (shm_guest_path(name, linux_path) != 0) return -1;
-    char buffer[PATH_MAX];
-    const char *actual = bionicx_redirect_path(linux_path, buffer);
-    if (actual == NULL) return -1;
-    return next(actual);
-}
-
 static int is_proc_self_exe(const char *path) {
     char *end = NULL;
     long pid;
@@ -430,45 +346,10 @@ const char *bionicx_redirect_path(const char *path, char buffer[PATH_MAX]) {
     if (proc_version != NULL) return proc_version;
     const char *shells = redirect_etc_shells(path, buffer);
     if (shells != NULL) return shells;
-    const char *dev_shm = redirect_dev_shm(path, buffer);
-    if (dev_shm != NULL) return dev_shm;
-    const char *target = NULL;
-    const char *suffix = NULL;
-    if (strcmp(path, "/tmp") == 0 || strncmp(path, "/tmp/", 5) == 0) {
-        target = bionicx_captured_tmpdir();
-        if (target == NULL) target = bionicx_getenv("BIONICX_TMPDIR");
-        if (target == NULL || target[0] != '/') return path;
-        suffix = path + 4;
-    } else if (strcmp(path, "/run") == 0 || strncmp(path, "/run/", 5) == 0) {
-        target = bionicx_captured_tmpdir();
-        if (target == NULL) target = bionicx_getenv("BIONICX_TMPDIR");
-        if (target == NULL || target[0] != '/') return path;
-        ensure_run_backing(target);
-        suffix = path;
-    } else if (strcmp(path, "/usr") == 0 || strncmp(path, "/usr/", 5) == 0 ||
-            strcmp(path, "/bin") == 0 || strncmp(path, "/bin/", 5) == 0 ||
-            strcmp(path, "/sbin") == 0 || strncmp(path, "/sbin/", 6) == 0 ||
-            strcmp(path, "/lib") == 0 || strncmp(path, "/lib/", 5) == 0 ||
-            strcmp(path, "/lib64") == 0 || strncmp(path, "/lib64/", 7) == 0 ||
-            strcmp(path, "/etc") == 0 || strncmp(path, "/etc/", 5) == 0 ||
-            strcmp(path, "/opt") == 0 || strncmp(path, "/opt/", 5) == 0 ||
-            strcmp(path, "/var") == 0 || strncmp(path, "/var/", 5) == 0 ||
-            /* Ordinary applications must enumerate the same root that owns
-             * the redirected /usr, /etc and /lib trees, not Android's root. */
-            strcmp(path, "/") == 0 || strcmp(path, "/.") == 0) {
-        target = bionicx_captured_rootfs();
-        if (target == NULL) target = bionicx_getenv("BIONICX_ROOTFS");
-        if (target == NULL || target[0] != '/') return path;
-        suffix = path;
-    } else {
-        return path;
-    }
-    int count = snprintf(buffer, PATH_MAX, "%s%s", target, suffix);
-    if (count < 0 || count >= PATH_MAX) {
-        errno = ENAMETOOLONG;
-        return NULL;
-    }
-    return buffer;
+    static const char *(*root_path)(const char *, char *);
+    if (!root_path) root_path = dlsym(RTLD_NEXT, "__arlinux_root_path");
+    if (!root_path) { errno = ENOSYS; return NULL; }
+    return root_path(path, buffer);
 }
 
 /* Kernel follows absolute symlinks without FHS rewrite, so a rootfs link
@@ -638,41 +519,14 @@ int inotify_add_watch(int fd, const char *path, uint32_t mask) {
     return next(fd, actual, mask);
 }
 
-/* Node/libuv and Chromium issue openat/statx/inotify via syscall(), not
- * libc open. Zygote children also clearenv(), so path rewrite must not
- * depend on the live environment. Call the kernel directly: forwarding
- * through libc syscall() uses the wrong variadic ABI on AArch64. */
-static long kernel_syscall6(long number, long a1, long a2, long a3, long a4,
-                            long a5, long a6) {
-#if defined(__aarch64__)
-    register long x8 __asm__("x8") = number;
-    register long x0 __asm__("x0") = a1;
-    register long x1 __asm__("x1") = a2;
-    register long x2 __asm__("x2") = a3;
-    register long x3 __asm__("x3") = a4;
-    register long x4 __asm__("x4") = a5;
-    register long x5 __asm__("x5") = a6;
-    __asm__ volatile("svc 0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2), "r"(x3),
-                     "r"(x4), "r"(x5) : "memory", "cc");
-    return x0;
-#elif defined(__x86_64__)
-    register long r10 __asm__("r10") = a4;
-    register long r8 __asm__("r8") = a5;
-    register long r9 __asm__("r9") = a6;
-    long result;
-    __asm__ volatile("syscall"
-                     : "=a"(result)
-                     : "a"(number), "D"(a1), "S"(a2), "d"(a3), "r"(r10),
-                       "r"(r8), "r"(r9)
-                     : "rcx", "r11", "memory", "cc");
-    return result;
-#else
-    static long (*next)(long, long, long, long, long, long, long);
-    if (next == NULL)
-        next = (long (*)(long, long, long, long, long, long, long))
-                dlsym(RTLD_NEXT, "syscall");
+/* Guest namespace and path translation are still transitional interposition.
+ * Kernel compatibility belongs to libc, including its syscall() entry point. */
+static long libc_syscall6(long number, long a1, long a2, long a3, long a4,
+                         long a5, long a6) {
+    static long (*next)(long, ...);
+    if (next == NULL) next = dlsym(RTLD_NEXT, "syscall");
+    if (next == NULL) { errno = ENOSYS; return -1; }
     return next(number, a1, a2, a3, a4, a5, a6);
-#endif
 }
 
 long syscall(long number, ...) {
@@ -693,6 +547,7 @@ long syscall(long number, ...) {
         if (fd != -2) return fd;
     }
     long *path_slot = NULL;
+    char path_buffer[PATH_MAX];
 #ifdef SYS_openat
     if (number == SYS_openat) path_slot = &a2;
 #endif
@@ -741,8 +596,6 @@ long syscall(long number, ...) {
 #ifdef SYS_utimes
     if (number == SYS_utimes) path_slot = &a1;
 #endif
-    if (bionicx_seccomp_deny_id(number))
-        return 0;
 #ifdef SYS_setxattr
     if ((number == SYS_setxattr
 #ifdef SYS_lsetxattr
@@ -752,9 +605,9 @@ long syscall(long number, ...) {
             || number == SYS_fsetxattr
 #endif
             ) && bionicx_is_file_capability_xattr((const char *)a2)) {
-        long cap_result = kernel_syscall6(number, a1, a2, a3, a4, a5, a6);
-        if (cap_result < 0 && cap_result > -4096) {
-            int err = (int)-cap_result;
+        long cap_result = libc_syscall6(number, a1, a2, a3, a4, a5, a6);
+        if (cap_result == -1) {
+            int err = errno;
             if (err == EPERM || err == EACCES || err == ENOSYS || err == EOPNOTSUPP)
                 return 0;
             errno = err;
@@ -784,43 +637,6 @@ long syscall(long number, ...) {
                              (void *)a5);
     }
 #endif
-    if (bionicx_seccomp_probe(number)) {
-        errno = ENOSYS;
-        return -1;
-    }
-#if defined(SYS_epoll_pwait2) && defined(SYS_epoll_pwait)
-    /* Android's app seccomp policy can trap epoll_pwait2 even on kernels that
-     * implement it. Reissuing a trapped call from the SIGSYS handler loops
-     * until the process exhausts its signal stack. epoll_pwait provides the
-     * same operation with millisecond timeout precision, which is sufficient
-     * for glib/systemd event loops and is permitted for app processes. */
-    if (number == SYS_epoll_pwait2) {
-        const struct timespec *timeout = (const struct timespec *)a4;
-        long timeout_ms = -1;
-        if (timeout != NULL) {
-            if (timeout->tv_sec < 0 || timeout->tv_nsec < 0 ||
-                    timeout->tv_nsec >= 1000000000L) {
-                errno = EINVAL;
-                return -1;
-            }
-            if (timeout->tv_sec >= INT_MAX / 1000) {
-                timeout_ms = INT_MAX;
-            } else {
-                timeout_ms = timeout->tv_sec * 1000 +
-                        (timeout->tv_nsec + 999999L) / 1000000L;
-                if (timeout_ms > INT_MAX)
-                    timeout_ms = INT_MAX;
-            }
-        }
-        long result = kernel_syscall6(SYS_epoll_pwait, a1, a2, a3,
-                                      timeout_ms, a5, a6);
-        if (result < 0 && result > -4096) {
-            errno = (int)-result;
-            return -1;
-        }
-        return result;
-    }
-#endif
 #ifdef SYS_readlinkat
     if (number == SYS_readlinkat && is_proc_self_exe((const char *)a2)) {
         if (a3 == 0) {
@@ -829,25 +645,6 @@ long syscall(long number, ...) {
         }
         return readlink_self_exe((char *)a3, (size_t)a4);
     }
-#endif
-#ifdef SYS_timerfd_create
-    if (number == SYS_timerfd_create)
-        return bionicx_timerfd_create((int)a1, (int)a2);
-#endif
-#ifdef SYS_timerfd_settime
-    if (number == SYS_timerfd_settime)
-        return bionicx_timerfd_settime((int)a1, (int)a2, (const void *)a3,
-                                       (void *)a4);
-#endif
-#ifdef SYS_timerfd_gettime
-    if (number == SYS_timerfd_gettime)
-        return bionicx_timerfd_gettime((int)a1, (void *)a2);
-#endif
-#ifdef SYS_accept
-#ifdef SYS_accept4
-    if (number == SYS_accept)
-        return kernel_syscall6(SYS_accept4, a1, a2, a3, 0, 0, 0);
-#endif
 #endif
     if (path_slot != NULL) {
         const char *path = (const char *)*path_slot;
@@ -861,7 +658,6 @@ long syscall(long number, ...) {
                 if (exe != NULL)
                     path = exe;
             }
-            char buffer[PATH_MAX];
             int follow = 1;
 #ifdef SYS_openat
             if (number == SYS_openat && (a3 & O_NOFOLLOW) != 0)
@@ -903,7 +699,7 @@ long syscall(long number, ...) {
             if (number == SYS_utimes)
                 follow = 0;
 #endif
-            const char *actual = bionicx_redirect_open_path(path, buffer,
+            const char *actual = bionicx_redirect_open_path(path, path_buffer,
                                                             follow);
             if (actual == NULL) return -1;
             if (actual != path) *path_slot = (long)actual;
@@ -946,26 +742,10 @@ long syscall(long number, ...) {
             if (actual == NULL) return -1;
             if (actual != new_path) *new_slot = (long)actual;
         }
-        long result = kernel_syscall6(number, a1, a2, a3, a4, a5, a6);
-        if (result < 0 && result > -4096) {
-            errno = (int)-result;
-            return -1;
-        }
-        return result;
+        return libc_syscall6(number, a1, a2, a3, a4, a5, a6);
     }
 #endif
-#ifdef SYS_close_range
-    /* node-pty calls syscall(SYS_close_range, 3, ~0U, CLOSE_RANGE_CLOEXEC)
-     * after forkpty. A mis-decoded first fd of 0 would CLOEXEC stdin, so
-     * execve drops the slave and bash exits 0 on /dev/null. */
-    if (number == SYS_close_range && a1 < 3) a1 = 3;
-#endif
-    long result = kernel_syscall6(number, a1, a2, a3, a4, a5, a6);
-    if (result < 0 && result > -4096) {
-        errno = (int)-result;
-        return -1;
-    }
-    return result;
+    return libc_syscall6(number, a1, a2, a3, a4, a5, a6);
 }
 
 static int guest_virtual_root_active(void) {
@@ -1697,53 +1477,6 @@ int unlinkat(int directory, const char *path, int flags) {
     return next(directory, actual, flags);
 }
 
-int rmdir(const char *path) {
-    static int (*next)(const char *);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "rmdir");
-    char buffer[PATH_MAX];
-    const char *actual = bionicx_redirect_path(path, buffer);
-    return actual != NULL ? next(actual) : -1;
-}
-
-int remove(const char *path) {
-    static int (*next)(const char *);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "remove");
-    char buffer[PATH_MAX];
-    const char *actual = bionicx_redirect_path(path, buffer);
-    return actual != NULL ? next(actual) : -1;
-}
-
-int rename(const char *old_path, const char *new_path) {
-    static int (*next)(const char *, const char *);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "rename");
-    char old_buffer[PATH_MAX], new_buffer[PATH_MAX];
-    const char *actual_old = bionicx_redirect_path(old_path, old_buffer);
-    const char *actual_new = bionicx_redirect_path(new_path, new_buffer);
-    if (actual_old == NULL || actual_new == NULL) return -1;
-    return next(actual_old, actual_new);
-}
-
-int renameat(int old_directory, const char *old_path, int new_directory,
-             const char *new_path) {
-    static int (*next)(int, const char *, int, const char *);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "renameat");
-    char old_buffer[PATH_MAX], new_buffer[PATH_MAX];
-    const char *actual_old = bionicx_redirect_path(old_path, old_buffer);
-    const char *actual_new = bionicx_redirect_path(new_path, new_buffer);
-    if (actual_old == NULL || actual_new == NULL) return -1;
-    return next(old_directory, actual_old, new_directory, actual_new);
-}
-
-int renameat2(int old_directory, const char *old_path, int new_directory,
-              const char *new_path, unsigned int flags) {
-    static int (*next)(int, const char *, int, const char *, unsigned int);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "renameat2");
-    char old_buffer[PATH_MAX], new_buffer[PATH_MAX];
-    const char *actual_old = bionicx_redirect_path(old_path, old_buffer);
-    const char *actual_new = bionicx_redirect_path(new_path, new_buffer);
-    if (actual_old == NULL || actual_new == NULL) return -1;
-    return next(old_directory, actual_old, new_directory, actual_new, flags);
-}
 
 static int link_copy_forced(void) {
     const char *force = bionicx_getenv("BIONICX_FORCE_LINK_COPY");
@@ -1925,113 +1658,6 @@ int linkat(int old_directory, const char *old_path, int new_directory,
                        flags);
 }
 
-int chdir(const char *path) {
-    static int (*next)(const char *);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "chdir");
-    char buffer[PATH_MAX];
-    const char *actual = bionicx_redirect_path(path, buffer);
-    return actual != NULL ? next(actual) : -1;
-}
-
-int mkdir(const char *path, mode_t mode) {
-    static int (*next)(const char *, mode_t);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "mkdir");
-    char resolved[PATH_MAX];
-    char buffer[PATH_MAX];
-    if (path[0] != '/' && resolve_at_path(AT_FDCWD, path, resolved) == 0)
-        path = resolved;
-    const char *actual = bionicx_redirect_path(path, buffer);
-    return actual != NULL ? next(actual, mode) : -1;
-}
-
-int mkdirat(int directory, const char *path, mode_t mode) {
-    static int (*next)(int, const char *, mode_t);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "mkdirat");
-    char buffer[PATH_MAX];
-    const char *actual = bionicx_redirect_path(path, buffer);
-    return actual != NULL ? next(directory, actual, mode) : -1;
-}
-
-static void copy_random_suffix(char *path, const char *actual,
-                               int suffix_length) {
-    size_t path_length = strlen(path);
-    size_t actual_length = strlen(actual);
-    size_t random_length = 6;
-    if (path_length >= random_length + (size_t)suffix_length &&
-            actual_length >= random_length + (size_t)suffix_length) {
-        memcpy(path + path_length - suffix_length - random_length,
-               actual + actual_length - suffix_length - random_length,
-               random_length);
-    }
-}
-
-int mkstemp(char *path) {
-    static int (*next)(char *);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "mkstemp");
-    char buffer[PATH_MAX];
-    char *actual = (char *)bionicx_redirect_path(path, buffer);
-    if (actual == NULL) return -1;
-    int result = next(actual);
-    if (result >= 0 && actual != path) copy_random_suffix(path, actual, 0);
-    return result;
-}
-
-int mkstemp64(char *path) {
-    static int (*next)(char *);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "mkstemp64");
-    if (next == NULL) next = dlsym(RTLD_NEXT, "mkstemp");
-    char buffer[PATH_MAX];
-    char *actual = (char *)bionicx_redirect_path(path, buffer);
-    if (actual == NULL) return -1;
-    int result = next(actual);
-    if (result >= 0 && actual != path) copy_random_suffix(path, actual, 0);
-    return result;
-}
-
-int mkostemp(char *path, int flags) {
-    static int (*next)(char *, int);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "mkostemp");
-    char buffer[PATH_MAX];
-    char *actual = (char *)bionicx_redirect_path(path, buffer);
-    if (actual == NULL) return -1;
-    int result = next(actual, flags);
-    if (result >= 0 && actual != path) copy_random_suffix(path, actual, 0);
-    return result;
-}
-
-int mkstemps(char *path, int suffix_length) {
-    static int (*next)(char *, int);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "mkstemps");
-    char buffer[PATH_MAX];
-    char *actual = (char *)bionicx_redirect_path(path, buffer);
-    if (actual == NULL) return -1;
-    int result = next(actual, suffix_length);
-    if (result >= 0 && actual != path)
-        copy_random_suffix(path, actual, suffix_length);
-    return result;
-}
-
-int mkostemps(char *path, int suffix_length, int flags) {
-    static int (*next)(char *, int, int);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "mkostemps");
-    char buffer[PATH_MAX];
-    char *actual = (char *)bionicx_redirect_path(path, buffer);
-    if (actual == NULL) return -1;
-    int result = next(actual, suffix_length, flags);
-    if (result >= 0 && actual != path)
-        copy_random_suffix(path, actual, suffix_length);
-    return result;
-}
-
-char *mkdtemp(char *path) {
-    static char *(*next)(char *);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "mkdtemp");
-    char buffer[PATH_MAX];
-    char *actual = (char *)bionicx_redirect_path(path, buffer);
-    if (actual == NULL || next(actual) == NULL) return NULL;
-    if (actual != path) copy_random_suffix(path, actual, 0);
-    return path;
-}
 
 static int redirect_socket_address(const struct sockaddr *address,
                                    socklen_t length,

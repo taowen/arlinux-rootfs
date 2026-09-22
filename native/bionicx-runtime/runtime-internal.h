@@ -63,15 +63,8 @@ BIONICX_INTERNAL mode_t bionicx_optional_mode(
 BIONICX_INTERNAL int bionicx_ignore_ownership_failure(int result);
 BIONICX_INTERNAL int bionicx_is_file_capability_xattr(const char *name);
 BIONICX_INTERNAL int bionicx_ignore_file_capability_failure(int result);
-BIONICX_INTERNAL int bionicx_seccomp_deny_id(long number);
-BIONICX_INTERNAL int bionicx_seccomp_probe(long number);
 BIONICX_INTERNAL int bionicx_statx(int dirfd, const char *path, int flags,
                                    unsigned int mask, void *buf);
-BIONICX_INTERNAL int bionicx_timerfd_create(int clockid, int flags);
-BIONICX_INTERNAL int bionicx_timerfd_settime(int fd, int flags,
-                                             const void *new_value,
-                                             void *old_value);
-BIONICX_INTERNAL int bionicx_timerfd_gettime(int fd, void *curr);
 
 BIONICX_INTERNAL pid_t bionicx_host_pid(void);
 BIONICX_INTERNAL pid_t bionicx_ns_host_pid(pid_t);

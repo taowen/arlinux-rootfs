@@ -69,7 +69,7 @@ mkdir -p "$cache_dir"
 definition_hash="$({
     printf '%s\n' "$glibc_version" "$glibc_sha256" "$package_commit" \
         "$source_prefix" "$target_prefix" "$library_dirs"
-    sha256sum "$recipe"/* "$0" | cut -d ' ' -f1
+    sha256sum "$recipe"/* "$repo_dir/runtime/glibc/common/"* "$0" | cut -d ' ' -f1
 } | sha256sum | cut -c1-16)"
 result_dir="$cache_dir/android-glibc-$definition_hash"
 exec 9>"$cache_dir/android-glibc-$definition_hash.lock"
@@ -136,16 +136,32 @@ apply_source_patch "$recipe/zz-arlinux-ldconfig-prefix.patch"
 apply_source_patch "$recipe/zz-arlinux-loader-search-path.patch"
 
 linux_dir="$temporary/source/sysdeps/unix/sysv/linux"
-cp "$temporary/package"/shm{at,ctl,dt,get}.c \
-    "$temporary/package"/syscall.c \
+cp "$temporary/package"/syscall.c \
     "$temporary/package"/fakesyscall*.h \
     "$temporary/package"/fake_epoll_pwait2.c \
     "$temporary/package"/setfs{u,g}id.c "$linux_dir/"
 # Keep upstream mprotect: the imported PROT_EXEC fallback corrupts its
 # /proc/self/maps buffers and can replace mappings after an EACCES failure.
 # Callers (including Qt QML) must receive the kernel permission error.
-cp "$temporary/package"/shmem-android.{c,h} \
-    "$temporary/source/sysvipc/"
+# One stateful SysV SHM implementation lives in libc. Do not build the imported
+# ashmem implementation as well, and do not override these APIs in LD_PRELOAD.
+cp "$repo_dir/runtime/glibc/common/sysv-shm.c" "$temporary/source/sysvipc/shm-runtime.c"
+cp "$repo_dir/runtime/glibc/common/sysv-semaphore.c" "$temporary/source/sysvipc/sem-runtime.c"
+cp "$repo_dir/runtime/glibc/common/close_range.c" "$temporary/source/io/close_range.c"
+python3 - "$temporary/source/sysvipc/Makefile" <<'PY'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+text = path.read_text()
+old = 'shmem-android \\\n\t    shmat shmdt shmget shmctl'
+if text.count(old) != 1:
+    raise SystemExit('glibc SysV IPC routine list changed; review the source recipe')
+text = text.replace(old, 'shm-runtime')
+old = 'semop semget semctl semtimedop'
+if text.count(old) != 1:
+    raise SystemExit('glibc semaphore routine list changed; review the source recipe')
+path.write_text(text.replace(old, 'sem-runtime'))
+PY
 cp "$temporary/package/syslog.c" "$temporary/source/misc/"
 if [[ -f "$recipe/zz-arlinux-syslog-export.patch" ]]; then
     apply_source_patch "$recipe/zz-arlinux-syslog-export.patch"
@@ -162,6 +178,29 @@ bash "$temporary/package/gen-android-ids.sh" "$source_prefix" \
     "$temporary/package/android_system_user_ids.h"
 
 disabled_header="$linux_dir/aarch64/disabled-syscall.h"
+# The same libc backend owns public IPC calls and syscall(2). Replace the
+# imported ENOSYS entries rather than repairing them later with LD_PRELOAD.
+python3 - "$temporary/package/fakesyscall.json" "$linux_dir/fakesyscall-base.h" <<'PY'
+from pathlib import Path
+import json
+import sys
+path = Path(sys.argv[1])
+policy = json.loads(path.read_text())
+calls = {
+    'semget(a0, a1, a2)': 'semget',
+    'semop(a0, (struct sembuf *)a1, a2)': 'semop',
+    'semtimedop(a0, (struct sembuf *)a1, a2, (const struct timespec *)a3)': 'semtimedop',
+    'semctl(a0, a1, a2, (union arlinux_semun){ .bits = (unsigned long)a3 })': 'semctl',
+}
+for expression, name in calls.items():
+    for names in policy.values():
+        if name in names:
+            names.remove(name)
+    policy[expression] = [name]
+path.write_text(json.dumps(policy))
+header = Path(sys.argv[2])
+header.write_text(header.read_text() + '\n#include <sys/sem.h>\nunion arlinux_semun { int val; unsigned short *array; struct semid_ds *buf; unsigned long bits; };\n')
+PY
 touch "$disabled_header"
 while read -r syscall_name; do
     grep "#define __NR_${syscall_name} " \
@@ -190,6 +229,8 @@ done < <(jq -r '.[] | .[]' "$temporary/package/fakesyscall.json")
 } >> "$disabled_header"
 sed -i '$ s| \\$||' "$disabled_header"
 
+python3 "$repo_dir/runtime/glibc/common/install-syscalls.py" "$temporary/source"
+
 printf '%s\n' \
     "user-defined-trusted-dirs=$trusted_dirs" \
     "slibdir=$source_prefix/lib" \
@@ -198,6 +239,11 @@ printf '%s\n' \
     "rootsbindir=$source_prefix/bin" > "$temporary/build/configparms"
 
 pushd "$temporary/build" >/dev/null
+if command -v ccache >/dev/null 2>&1; then
+    export CC="ccache aarch64-linux-gnu-gcc"
+    export CXX="ccache aarch64-linux-gnu-g++"
+    export CCACHE_BASEDIR="$temporary" CCACHE_NOHASHDIR=true
+fi
 "$temporary/source/configure" \
     --prefix="$source_prefix" --libdir="$source_prefix/lib" \
     --libexecdir="$source_prefix/lib" \

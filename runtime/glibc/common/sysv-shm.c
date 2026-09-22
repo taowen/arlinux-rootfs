@@ -1,9 +1,9 @@
 #define _GNU_SOURCE
-#include "runtime-internal.h"
 
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <paths.h>
 #include <pthread.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -32,7 +32,6 @@ struct bx_shm_segment {
     int id;
     int fd;
     size_t size;
-    void *addr;
     int mapped;
     int marked_for_deletion;
     key_t key;
@@ -46,6 +45,16 @@ static int bx_shm_socket_id;
 static int bx_shm_listen_fd = -1;
 static pthread_t bx_shm_thread;
 
+/* Each shmat creates an independent mapping, including read-only attachments.
+ * Segment lifetime and mapping lifetime must not be conflated. */
+struct bx_shm_attachment {
+    void *address;
+    size_t size;
+    int shmid;
+    struct bx_shm_attachment *next;
+};
+static struct bx_shm_attachment *bx_shm_attachments;
+
 static int shmid_from_counter(unsigned int counter) {
     return (int)((unsigned int)bx_shm_socket_id * 0x10000u + (counter & 0x7fffu));
 }
@@ -58,11 +67,6 @@ static int find_local_index(int shmid) {
 }
 
 static void delete_index(size_t index) {
-    if (bx_shm_segments[index].addr != NULL) {
-        munmap(bx_shm_segments[index].addr, bx_shm_segments[index].size);
-        bx_shm_segments[index].addr = NULL;
-        bx_shm_segments[index].mapped = 0;
-    }
     if (bx_shm_segments[index].fd >= 0) {
         close(bx_shm_segments[index].fd);
         bx_shm_segments[index].fd = -1;
@@ -86,13 +90,8 @@ static int create_memory_fd(size_t size) {
         return -1;
     }
 #endif
-    const char *temporary = bionicx_captured_tmpdir();
-    if (temporary == NULL || temporary[0] != '/')
-        temporary = bionicx_getenv("BIONICX_TMPDIR");
-    if (temporary == NULL || temporary[0] != '/') {
-        errno = ENOENT;
-        return -1;
-    }
+    const char *temporary = getenv("BIONICX_TMPDIR");
+    if (temporary == NULL || temporary[0] != '/') temporary = _PATH_TMP;
     char directory[PATH_MAX];
     if (snprintf(directory, sizeof(directory), "%s/sysv-shm", temporary) >=
             (int)sizeof(directory)) {
@@ -176,7 +175,8 @@ static int ensure_listener(void) {
         struct sockaddr_un address;
         memset(&address, 0, sizeof(address));
         address.sun_family = AF_UNIX;
-        bx_shm_socket_id = (bionicx_host_pid() + i) & 0xffff;
+        /* Keep the sign bit of the public shmid clear. */
+        bx_shm_socket_id = (getpid() + i) & 0x7fff;
         int name_length = snprintf(&address.sun_path[1],
                                    sizeof(address.sun_path) - 1,
                                    BX_SHM_SOCKNAME, bx_shm_socket_id);
@@ -271,6 +271,11 @@ int shmget(key_t key, size_t size, int flags) {
 }
 
 void *shmat(int shmid, const void *shmaddr, int shmflg) {
+    if ((shmflg & ~(SHM_RDONLY | SHM_RND | SHM_REMAP | SHM_EXEC)) ||
+        ((shmflg & SHM_REMAP) && shmaddr == NULL)) {
+        errno = EINVAL;
+        return (void *)-1;
+    }
     pthread_mutex_lock(&bx_shm_lock);
     int index = find_local_index(shmid);
     if (index < 0) {
@@ -279,39 +284,64 @@ void *shmat(int shmid, const void *shmaddr, int shmflg) {
         return (void *)-1;
     }
     struct bx_shm_segment *segment = &bx_shm_segments[index];
-    if (segment->addr == NULL) {
-        int prot = PROT_READ | ((shmflg & SHM_RDONLY) ? 0 : PROT_WRITE);
-        int map_flags = MAP_SHARED | (shmaddr != NULL ? MAP_FIXED : 0);
-        void *address = mmap((void *)shmaddr, segment->size, prot, map_flags,
-                             segment->fd, 0);
-        if (address == MAP_FAILED) {
-            pthread_mutex_unlock(&bx_shm_lock);
-            return (void *)-1;
-        }
-        segment->addr = address;
-        segment->mapped = 1;
+    struct bx_shm_attachment *attachment = malloc(sizeof(*attachment));
+    if (attachment == NULL) {
+        pthread_mutex_unlock(&bx_shm_lock);
+        errno = ENOMEM;
+        return (void *)-1;
     }
-    void *address = segment->addr;
+    uintptr_t requested = (uintptr_t)shmaddr;
+    if (shmflg & SHM_RND) requested -= requested % SHMLBA;
+    if (requested % (uintptr_t)sysconf(_SC_PAGESIZE)) {
+        free(attachment);
+        pthread_mutex_unlock(&bx_shm_lock);
+        errno = EINVAL;
+        return (void *)-1;
+    }
+    int prot = PROT_READ | ((shmflg & SHM_RDONLY) ? 0 : PROT_WRITE)
+               | ((shmflg & SHM_EXEC) ? PROT_EXEC : 0);
+    /* A requested address is not permission to overwrite another mapping. */
+    int flags = MAP_SHARED | ((shmflg & SHM_REMAP) ? MAP_FIXED : 0);
+    void *address = mmap((void *)requested, segment->size, prot, flags, segment->fd, 0);
+    if (address != MAP_FAILED && requested && address != (void *)requested) {
+        munmap(address, segment->size);
+        address = MAP_FAILED;
+        errno = EINVAL;
+    }
+    if (address == MAP_FAILED) {
+        int saved = errno;
+        free(attachment);
+        pthread_mutex_unlock(&bx_shm_lock);
+        errno = saved;
+        return (void *)-1;
+    }
+    *attachment = (struct bx_shm_attachment){address, segment->size, shmid, bx_shm_attachments};
+    bx_shm_attachments = attachment;
+    ++segment->mapped;
     pthread_mutex_unlock(&bx_shm_lock);
     return address;
 }
 
 int shmdt(const void *shmaddr) {
     pthread_mutex_lock(&bx_shm_lock);
-    for (size_t i = 0; i < bx_shm_count; ++i) {
-        if (bx_shm_segments[i].addr != shmaddr) continue;
-        if (munmap(bx_shm_segments[i].addr, bx_shm_segments[i].size) != 0) {
+    for (struct bx_shm_attachment **link = &bx_shm_attachments; *link; link = &(*link)->next) {
+        struct bx_shm_attachment *attachment = *link;
+        if (attachment->address != shmaddr) continue;
+        if (munmap(attachment->address, attachment->size) != 0) {
             pthread_mutex_unlock(&bx_shm_lock);
             return -1;
         }
-        bx_shm_segments[i].addr = NULL;
-        bx_shm_segments[i].mapped = 0;
-        if (bx_shm_segments[i].marked_for_deletion) delete_index(i);
+        int index = find_local_index(attachment->shmid);
+        if (index >= 0 && --bx_shm_segments[index].mapped == 0 &&
+            bx_shm_segments[index].marked_for_deletion) delete_index((size_t)index);
+        *link = attachment->next;
+        free(attachment);
         pthread_mutex_unlock(&bx_shm_lock);
         return 0;
     }
     pthread_mutex_unlock(&bx_shm_lock);
-    return 0;
+    errno = EINVAL;
+    return -1;
 }
 
 int shmctl(int shmid, int cmd, struct shmid_ds *buf) {
@@ -332,7 +362,6 @@ int shmctl(int shmid, int cmd, struct shmid_ds *buf) {
     int index = find_local_index(shmid);
     if (index < 0) {
         pthread_mutex_unlock(&bx_shm_lock);
-        if (cmd == IPC_RMID) return 0;
         errno = EINVAL;
         return -1;
     }
@@ -352,7 +381,7 @@ int shmctl(int shmid, int cmd, struct shmid_ds *buf) {
         }
         memset(buf, 0, sizeof(*buf));
         buf->shm_segsz = bx_shm_segments[index].size;
-        buf->shm_nattch = bx_shm_segments[index].mapped ? 1 : 0;
+        buf->shm_nattch = bx_shm_segments[index].mapped;
         buf->shm_perm.mode = 0666;
         pthread_mutex_unlock(&bx_shm_lock);
         return 0;

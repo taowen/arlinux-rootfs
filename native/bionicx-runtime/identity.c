@@ -10,57 +10,6 @@
 #include <string.h>
 #include <unistd.h>
 
-static int env_nonzero(const char *name) {
-    const char *value = bionicx_getenv(name);
-    if (!value) value = bionicx_captured_value(name);
-    return value != NULL && value[0] != '\0' && strcmp(value, "0") != 0;
-}
-
-static int virtual_root(void) {
-    /* Product policy enables virtual identity only for package transactions. */
-    return env_nonzero("BIONICX_VIRTUAL_ROOT");
-}
-
-uid_t getuid(void) {
-    static uid_t (*next)(void);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "getuid");
-    return virtual_root() ? 0 : next();
-}
-
-uid_t geteuid(void) {
-    static uid_t (*next)(void);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "geteuid");
-    return virtual_root() ? 0 : next();
-}
-
-gid_t getgid(void) {
-    static gid_t (*next)(void);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "getgid");
-    return virtual_root() ? 0 : next();
-}
-
-gid_t getegid(void) {
-    static gid_t (*next)(void);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "getegid");
-    return virtual_root() ? 0 : next();
-}
-
-/* Newer shells obtain all three IDs in one call. Match the ordinary getters. */
-int getresuid(uid_t *real, uid_t *effective, uid_t *saved) {
-    static int (*next)(uid_t *, uid_t *, uid_t *);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "getresuid");
-    int result = next(real, effective, saved);
-    if (result == 0 && virtual_root()) *real = *effective = *saved = 0;
-    return result;
-}
-
-int getresgid(gid_t *real, gid_t *effective, gid_t *saved) {
-    static int (*next)(gid_t *, gid_t *, gid_t *);
-    if (next == NULL) next = dlsym(RTLD_NEXT, "getresgid");
-    int result = next(real, effective, saved);
-    if (result == 0 && virtual_root()) *real = *effective = *saved = 0;
-    return result;
-}
 
 /* Zygote traps these. Returning 0 keeps Debian setuid helpers (xterm,
  * xkbcomp) from aborting; the app UID does not actually change. */

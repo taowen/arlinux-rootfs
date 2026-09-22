@@ -1,7 +1,8 @@
-#include "runtime-internal.h"
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <paths.h>
+#include <sysdep.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdatomic.h>
@@ -64,8 +65,7 @@ struct bx_mapping {
 static int make_namespace(char *directory, size_t capacity) {
     const char *temporary = getenv("BIONICX_TMPDIR");
     if (temporary == NULL || temporary[0] != '/') {
-        errno = ENOENT;
-        return -1;
+        temporary = _PATH_TMP;
     }
     if (snprintf(directory, capacity, "%s/sysv-sem-v2", temporary) >=
             (int)capacity) {
@@ -141,7 +141,7 @@ static int open_id(int id, struct bx_mapping *mapping) {
 static int allocate_id(void) {
     struct timespec time;
     (void)clock_gettime(CLOCK_MONOTONIC, &time);
-    uint32_t seed = (uint32_t)time.tv_nsec ^ (uint32_t)bionicx_host_pid() * 2654435761u;
+    uint32_t seed = (uint32_t)time.tv_nsec ^ (uint32_t)INTERNAL_SYSCALL_CALL(getpid) * 2654435761u;
     return BX_SEM_ID_BASE | (int)(seed & 0x000fffffu);
 }
 
@@ -245,7 +245,7 @@ int semget(key_t key, int nsems, int semflg) {
 static int wake_waiters(struct bx_sem_state *state) {
     atomic_fetch_add_explicit(&state->sequence, 1, memory_order_release);
 #ifdef SYS_futex
-    return (int)syscall(SYS_futex, &state->sequence, 1 /* FUTEX_WAKE */, INT_MAX,
+    return (int)INLINE_SYSCALL_CALL(futex, &state->sequence, 1 /* FUTEX_WAKE */, INT_MAX,
                         NULL, NULL, 0);
 #else
     return 0;
@@ -411,7 +411,7 @@ static int apply_operations(int semid, struct sembuf *operations, size_t count,
             deadline.tv_nsec -= 1000000000L;
         }
     }
-    pid_t pid = bionicx_host_pid();
+    pid_t pid = INTERNAL_SYSCALL_CALL(getpid);
     unsigned long long birth = 0;
     int needs_undo = 0;
     for (size_t i = 0; i < count; ++i)
@@ -496,7 +496,7 @@ static int apply_operations(int semid, struct sembuf *operations, size_t count,
         if (operations[blocked].sem_op == 0) ++state->wait_zero[number];
         else ++state->wait_negative[number];
         (void)lock_file(mapping.fd, F_UNLCK);
-        int wait_result = (int)syscall(SYS_futex, &state->sequence,
+        int wait_result = (int)INLINE_SYSCALL_CALL(futex, &state->sequence,
                 0 /* FUTEX_WAIT */, expected, &interval, NULL, 0);
         int saved = errno;
         if (lock_file(mapping.fd, F_WRLCK) != 0) break;

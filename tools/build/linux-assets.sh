@@ -18,13 +18,49 @@ gpu_inputs="$(git submodule status third_party/mesa third_party/libhybris third_
 
 ./tools/build/doctor.sh --quiet
 
+# Runtime changes do not require downloading and unpacking the distribution
+# again. Cache only the unmodified seed, before adding libc or GPU payloads.
+seed_rootfs() (
+    product="$1"; destination="$2"
+    [[ "$product" =~ ^[a-z0-9][a-z0-9-]*$ ]] || exit 2
+    product_dir="$repo/distributions/$product"
+    seed_id="$(cd "$product_dir" && {
+        sha256sum product.json rootfs.lock.json
+        find tools guest -type f -not -path '*/__pycache__/*' -print0 |
+            sort -z | xargs -0 -r sha256sum
+    } | sha256sum | cut -c1-24)"
+    base="$(realpath -m "$ARLINUX_CACHE_DIR/seeds")"
+    mkdir -p "$base"
+    entry="$base/$product-$seed_id"
+    exec 9>"$entry.lock"
+    flock 9
+    if [[ "$rebuild" == true || ! -f "$entry/complete" ]]; then
+        temporary="$(mktemp -d "$entry.XXXXXXXX")"
+        trap 'rm -rf -- "$temporary"' EXIT
+        "$product_dir/tools/seed.sh" "$temporary/rootfs"
+        if [[ -x "$product_dir/tools/post-seed.sh" ]]; then
+            "$product_dir/tools/post-seed.sh" "$temporary/rootfs"
+        fi
+        touch "$temporary/complete"
+        # This is one validated, content-addressed cache entry, not a guest
+        # instance or a user-supplied recursive deletion target.
+        rm -rf -- "$entry"
+        mv "$temporary" "$entry"
+        trap - EXIT
+    else
+        echo "OK seed    $product (cached)"
+    fi
+    cp -a --reflink=auto "$entry/rootfs/." "$destination/"
+)
+
 input_id() {
     local product="$1"
+    local inputs=(native/bionicx-runtime runtime protocols examples tools/build tools/arlinux-app-data)
     {
-        git ls-files -s native/bionicx-runtime runtime protocols tools/build tools/arlinux-app-data
-        git diff --binary -- native/bionicx-runtime runtime protocols tools/build tools/arlinux-app-data
+        git ls-files -s -- "${inputs[@]}"
+        git diff --binary -- "${inputs[@]}"
         git ls-files --others --exclude-standard -z -- \
-            native/bionicx-runtime runtime protocols tools/build tools/arlinux-app-data \
+            "${inputs[@]}" \
             | sort -z | xargs -0 -r sha256sum
         git -C "distributions/$product" ls-files -s guest native tools \
             product.json profile.json rootfs.lock.json
@@ -64,8 +100,7 @@ runtime_sources=(
   native/bionicx-runtime/fhs-exec.c native/bionicx-runtime/fhs-fork.c
   native/bionicx-runtime/fhs-pty.c native/bionicx-runtime/fhs-metadata.c
   native/bionicx-runtime/identity.c native/bionicx-runtime/namespace.c
-  native/bionicx-runtime/timerfd-emu.c native/bionicx-runtime/waitid-emu.c
-  native/bionicx-runtime/sysv-semaphore.c native/bionicx-runtime/sysv-shm.c)
+  native/bionicx-runtime/waitid-emu.c)
 for product in "${pending[@]}"; do
     output="build/linux/runtime/$product"; mkdir -p "$output"
     aarch64-linux-gnu-gcc -shared -fPIC -O2 -Wall -Wextra -Werror \
@@ -107,10 +142,7 @@ for product in "${pending[@]}"; do
     product_dir="$repo/distributions/$product"; rootfs="$stage/$product/rootfs"
     assets="$product_dir/build/assets"; glibc="${glibc_outputs[$product]}"
     rm -rf "$stage/$product" "$assets"; mkdir -p "$rootfs" "$assets"
-    "$product_dir/tools/seed.sh" "$rootfs"
-    if [[ -x "$product_dir/tools/post-seed.sh" ]]; then
-      "$product_dir/tools/post-seed.sh" "$rootfs"
-    fi
+    seed_rootfs "$product" "$rootfs"
     python3 - "$product_dir/product.json" "$rootfs" <<'PY'
 import json, os, pathlib, sys
 product = json.loads(pathlib.Path(sys.argv[1]).read_text())
@@ -149,6 +181,10 @@ for name, contents in [('etc/resolv.conf','nameserver 1.1.1.1\n'), ('etc/machine
     path = root / name
     if path.is_symlink(): path.unlink()
     path.parent.mkdir(parents=True, exist_ok=True); path.write_text(contents)
+# An unprivileged guest observes its process mount table through procfs.
+mtab = root / 'etc/mtab'
+if not os.path.lexists(mtab):
+    mtab.symlink_to('/proc/self/mounts')
 PY
     mkdir -p "$assets/bionicx/lib" "$assets/arlinux"
     cp -a "$product_dir/guest" "$assets/guest"

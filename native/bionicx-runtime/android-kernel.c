@@ -339,14 +339,6 @@ static int is_passthrough_syscall(long number)
 }
 #endif
 
-BIONICX_INTERNAL int bionicx_seccomp_deny_id(long number) {
-    return is_denied_id_syscall(number);
-}
-
-BIONICX_INTERNAL int bionicx_seccomp_probe(long number) {
-    return is_android_seccomp_probe(number);
-}
-
 static void handle_seccomp_trap(int signal_number, siginfo_t *info,
                                 void *raw_context) {
     long number;
@@ -465,53 +457,13 @@ static void handle_seccomp_trap(int signal_number, siginfo_t *info,
         return;
     }
 #if defined(__aarch64__)
-#ifdef SYS_timerfd_create
-    if (number == SYS_timerfd_create) {
-        ucontext_t *context = raw_context;
-        int result;
-
-        if (context == NULL)
-            return;
-        result = bionicx_timerfd_create((int)context->uc_mcontext.regs[0],
-                                        (int)context->uc_mcontext.regs[1]);
-        set_syscall_result(raw_context, result < 0
-            ? (uint64_t)(int64_t)-errno
-            : (uint64_t)(int64_t)result);
+    /* A blocked timerfd operation is unavailable; never allocate emulation
+     * state or create threads from a synchronous signal handler. */
+    if (number == SYS_timerfd_create || number == SYS_timerfd_settime ||
+            number == SYS_timerfd_gettime) {
+        set_syscall_result(raw_context, (uint64_t)-ENOSYS);
         return;
     }
-#endif
-#ifdef SYS_timerfd_settime
-    if (number == SYS_timerfd_settime) {
-        ucontext_t *context = raw_context;
-        int result;
-
-        if (context == NULL)
-            return;
-        result = bionicx_timerfd_settime((int)context->uc_mcontext.regs[0],
-                                         (int)context->uc_mcontext.regs[1],
-                                         (const void *)(uintptr_t)context->uc_mcontext.regs[2],
-                                         (void *)(uintptr_t)context->uc_mcontext.regs[3]);
-        set_syscall_result(raw_context, result < 0
-            ? (uint64_t)(int64_t)-errno
-            : (uint64_t)(int64_t)result);
-        return;
-    }
-#endif
-#ifdef SYS_timerfd_gettime
-    if (number == SYS_timerfd_gettime) {
-        ucontext_t *context = raw_context;
-        int result;
-
-        if (context == NULL)
-            return;
-        result = bionicx_timerfd_gettime((int)context->uc_mcontext.regs[0],
-                                         (void *)(uintptr_t)context->uc_mcontext.regs[1]);
-        set_syscall_result(raw_context, result < 0
-            ? (uint64_t)(int64_t)-errno
-            : (uint64_t)(int64_t)result);
-        return;
-    }
-#endif
 #endif
 #ifdef SYS_exit
     if (number == SYS_exit) {

@@ -16,14 +16,37 @@ int teapot_gate_enabled(void)
 void teapot_gate_hello(void)
 {
     printf("TEAPOT_CLIENT pid=%ld\n", (long)getpid());
+    if (teapot_env_flag("TEAPOT_GATE_ACK"))
+        puts("TEAPOT_SYNC ack-v1");
     fflush(stdout);
 }
 
 void teapot_gate_phase(const char *name)
 {
+    const char *dir = getenv("TEAPOT_EVIDENCE");
+    char ack[512];
+    int handshake = teapot_env_flag("TEAPOT_GATE_ACK") && dir && dir[0];
+    if (handshake) {
+        snprintf(ack, sizeof(ack), "%s/gate.ack", dir);
+        unlink(ack);
+    }
     printf("TEAPOT_PHASE %s\n", name);
     fflush(stdout);
-    sleep(4);
+    if (!handshake) {
+        sleep(4);
+        return;
+    }
+    /* Pause only the test's main loop, never vendor driver worker threads. */
+    const struct timespec interval = { .tv_sec = 0, .tv_nsec = 100000000 };
+    for (int attempt = 0; attempt < 300; attempt++) {
+        if (access(ack, F_OK) == 0) {
+            unlink(ack);
+            return;
+        }
+        nanosleep(&interval, NULL);
+    }
+    fprintf(stderr, "TEAPOT_CLIENT missing screenshot acknowledgement\n");
+    exit(2);
 }
 
 void teapot_gate_size(const char *phase, int width, int height)

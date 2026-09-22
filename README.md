@@ -61,19 +61,28 @@ git clone https://github.com/you/my-arlinux-distribution.git distributions/my-li
 ./build.sh build my-linux
 ```
 
-Read [Distribution authoring](docs/DISTRIBUTION-AUTHORING.md) for the complete
-contract and a from-scratch walkthrough. Public reference implementations are:
+Public reference implementations are:
 
 - [arlinux-debian](https://github.com/taowen/arlinux-debian)
 - [arlinux-arch](https://github.com/taowen/arlinux-arch)
 - [arlinux-omarchy](https://github.com/taowen/arlinux-omarchy)
 - [arlinux-lxqt](https://github.com/taowen/arlinux-lxqt)
 
-The [protocol index](PROTOCOL.md) separates the
-[static bundle format](STATIC-PROTOCOL.md) from the
-[Android–Linux runtime contract](RUNTIME-PROTOCOL.md). See
-[Graphics acceleration](docs/GRAPHICS.md) for more detail on the default
-Wayland, X11, OpenGL, Vulkan, and AHB presentation paths.
+## Documentation
+
+- [Distribution authoring](docs/DISTRIBUTION-AUTHORING.md): layout, build steps,
+  and desktop integration for a new rootfs.
+- [Static bundle protocol](docs/STATIC-PROTOCOL.md): required archive contents,
+  installation, instances, and first boot.
+- [Android–Linux runtime protocol](docs/RUNTIME-PROTOCOL.md): the live session,
+  display, input, graphics, audio, and accessibility contract.
+- [Graphics acceleration](docs/GRAPHICS.md): how Vulkan, OpenGL, Wayland, X11,
+  and AHB fit together, including current limitations.
+
+The [graphics protocol package](graphics-protocols/README.md) documents wire
+definitions for Xwayland, Mesa, libhybris, and compositor developers. The
+[glibc runtime notes](runtime/glibc/README.md) cover libc implementation and
+maintenance. Distribution authors normally need the documents above.
 
 ## Repository boundaries
 

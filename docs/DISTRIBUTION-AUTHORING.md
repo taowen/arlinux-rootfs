@@ -2,8 +2,8 @@
 
 This guide describes the public interface between an Arlinux distribution and
 `arlinux-rootfs`. It deliberately assumes no access to the Android host source.
-The normative contracts are the [static bundle protocol](../STATIC-PROTOCOL.md)
-and [Android–Linux runtime protocol](../RUNTIME-PROTOCOL.md).
+The normative contracts are the [static bundle protocol](STATIC-PROTOCOL.md)
+and [Android–Linux runtime protocol](RUNTIME-PROTOCOL.md).
 
 ## Design model
 
@@ -23,13 +23,6 @@ Applications run with the Android app's real UID, not host root. The runtime
 exposes the current guest account as `bionicx`, with the instance home directory;
 standard passwd lookups by name or UID describe the same account. Do not
 hard-code an Android `u0_aNNN` name or assume the UID is 1000.
-
-Image loaders based on recent Glycin require an explicit platform choice:
-Android app UIDs cannot create Bubblewrap's nested mount namespace. LXQt uses
-the upstream `GLYCIN_DISABLE_SANDBOX=i-know-the-risks` setting in its launch
-environment so GTK icons and images can load. The Android app sandbox still
-applies, but image decoding has **no additional loader sandbox** and shares the
-app's access to guest data. This is not equivalent to Bubblewrap isolation.
 
 ## Required layout
 
@@ -121,7 +114,7 @@ The shared builder also packages both GPU overlays: `gpu-qualcomm.tar.zst`
 each with its corresponding `*-id` file. Both are required bundle payloads;
 the host selects the device-appropriate one at installation. Distribution
 authors do not need separate Qualcomm and Mali recipes. See
-[the runtime protocol](../RUNTIME-PROTOCOL.md#graphics-acceleration-and-presentation)
+[the runtime protocol](RUNTIME-PROTOCOL.md#graphics-acceleration-and-presentation)
 for the host contract and [graphics support](GRAPHICS.md) for implementation
 details and current limitations.
 
@@ -192,10 +185,7 @@ session or application, not a second Linux compositor.
 
 Use the desktop's upstream session entry point so its configuration search
 paths, menu prefix, and theme defaults are initialized together. Install the
-icon and theme packages those defaults reference. With LXQt, `startlxqt`
-provides these defaults; its session configuration can declare
-`XDG_CURRENT_DESKTOP=LXQt:wlroots` in `[Environment]` to select the panel's
-standard Wayland window-management backend on the host compositor.
+icon and theme packages those defaults reference.
 
 Applications use ordinary Linux paths and the platform-provided loader/libc.
 The host installs and selects those runtime libraries. Do not prepend the
@@ -216,28 +206,28 @@ Use the package manager's documented configuration for installation policy.
 Graphics transport and desktop accessibility belong to their respective
 components, not to libc or process-name-specific distribution hooks.
 
+Some upstream image loaders require nested mount namespaces that Android app
+UIDs cannot create. Use an upstream-supported mode where available and document
+the tradeoff in the distribution. For example, Glycin's
+`GLYCIN_DISABLE_SANDBOX=i-know-the-risks` permits image loading but removes
+Glycin's own loader sandbox; the Android app sandbox still applies.
+
 ## Host services and desktop integration
 
-These services implement the dynamic contract summarized here. Refer to the
-[runtime protocol](../RUNTIME-PROTOCOL.md) for normative endpoint, lifetime,
-and message semantics.
+Install the client packages needed by the desktop. The
+[runtime protocol](RUNTIME-PROTOCOL.md) defines endpoint, lifetime, and message
+semantics.
 
 - Wayland and Xwayland clients are supported by the host compositor.
 - PulseAudio clients connect to the socket supplied under the host runtime
   directory; reference distributions install the standard ALSA Pulse plugin.
 - AT-SPI runs on the session D-Bus bus through `accessibility-session.sh`.
-- Hosted Android keyboard input can use the shared IBus engine at
-  `/usr/lib/arlinux/hosted-ime.py`. Install IBus, its Python introspection
-  bindings and the GTK input modules, then install the accompanying
-  `org.arlinux.HostedInput.service` in `/usr/share/dbus-1/services`.
-  Before launching the desktop, call `org.freedesktop.DBus.Peer.Ping` on the
-  session-bus destination `org.arlinux.HostedInput`, path `/org/arlinux/HostedInput`.
-  D-Bus activates the engine and waits for readiness; Qt clients must not start
-  before their input service is available. Set `QT_IM_MODULE=ibus`,
-  `GTK_IM_MODULE=ibus` and `XMODIFIERS=@im=ibus` in the desktop environment.
-  The engine starts IBus in its standard daemon mode and registers itself;
-  applications discover it through their normal input modules. No per-application
-  socket address or source modification is needed. LXQt provides this setup.
+- Hosted Android keyboard input uses the shared IBus engine. Install IBus,
+  Python GI bindings, toolkit input modules, and the supplied D-Bus service.
+  Activate the engine before launching desktop applications and export
+  `QT_IM_MODULE=ibus`, `GTK_IM_MODULE=ibus`, and `XMODIFIERS=@im=ibus`.
+  See the [hosted input method contract](RUNTIME-PROTOCOL.md#hosted-android-input-method)
+  for the activation endpoint and edit semantics.
 - `wl-clipboard` and `wtype` are suitable standard tools for clipboard and
   key injection inside the guest.
 - Android owns network, Bluetooth, brightness, suspend, reboot, and device

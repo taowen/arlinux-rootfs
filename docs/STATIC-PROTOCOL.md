@@ -3,7 +3,7 @@
 This document defines the persistent, host-independent contract of an
 `.zip` distribution bundle. Runtime communication between the
 installed guest and the Android host is defined separately in
-[RUNTIME-PROTOCOL.md](RUNTIME-PROTOCOL.md).
+[runtime protocol](RUNTIME-PROTOCOL.md).
 
 ## Archive
 

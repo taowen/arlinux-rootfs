@@ -1,5 +1,10 @@
 # Graphics acceleration
 
+This page explains the implementation and current limits of the
+[runtime graphics contract](RUNTIME-PROTOCOL.md#graphics-acceleration-and-presentation).
+The [graphics protocol package](../graphics-protocols/README.md) owns the wire
+definitions and version details.
+
 Arlinux provides the graphics stack and its environment as part of every
 distribution bundle. Applications should be started normally. Distribution
 profiles must not add application-specific GPU flags, select an ANGLE backend,
@@ -28,8 +33,9 @@ the GPU overlay does not replace them with copies from the build environment.
 Wayland and X11 share one accelerated presentation contract:
 
 1. The server allocates an Android Hardware Buffer (AHB) for the client image.
-2. Mesa imports that AHB and the GPU renders into it.
+2. Mesa or libhybris imports that AHB and the GPU renders into it.
 3. The Android renderer imports the same AHB and composites it on screen.
+4. Buffer release lets the producer reuse the image.
 
 Native Wayland clients use the `android_wlegl` path. Accelerated X11 EGL and
 GLX surfaces run through Xwayland and use `TAWC-DRI`, an X11 adapter to the

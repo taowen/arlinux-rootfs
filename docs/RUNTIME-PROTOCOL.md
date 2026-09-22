@@ -2,7 +2,7 @@
 
 This document defines the dynamic contract between a selected Linux instance
 and the Arlinux Android host. The archive and installation format is defined in
-[STATIC-PROTOCOL.md](STATIC-PROTOCOL.md).
+[static bundle protocol](STATIC-PROTOCOL.md).
 
 Distribution applications use standard Linux interfaces wherever one exists.
 Arlinux-specific wire protocols are limited to boundaries where Android native
@@ -58,43 +58,27 @@ distribution contract.
 
 ## Graphics acceleration and presentation
 
-The host selects one bundled Vulkan implementation for the device:
+The host selects the bundled Vulkan implementation for the device: Mesa Turnip
+on Qualcomm, or the Android vendor driver through libhybris on other supported
+GPUs. OpenGL and OpenGL ES use Mesa Zink over the selected Vulkan driver. The
+host configures the driver for the entire session; applications need no special
+GPU command-line flags.
 
-- Qualcomm uses Mesa Turnip over KGSL;
-- other supported GPUs use the Android vendor Vulkan driver through libhybris.
+Accelerated window presentation passes Android Hardware Buffers (AHBs) from
+the producer to the host compositor. Native Wayland clients use
+[`android_wlegl` version 3](../graphics-protocols/wayland-android.xml). X11 EGL,
+GLX, and Vulkan clients use [TAWC-DRI 0.4](../graphics-protocols/include/arlinux/tawc-dri.h)
+through Xwayland, which forwards the handle to `android_wlegl`. Producers must
+finish GPU work before presentation; the compositor must finish sampling before
+buffer release. These versions provide no explicit acquire or release fences.
 
-Vulkan executes in the application process or its GPU worker process. OpenGL
-and OpenGL ES use Mesa Zink over that same Vulkan driver. No application-specific
-flags are required.
-
-Accelerated Wayland and X11 presentation share an Android Hardware Buffer
-(AHB) contract:
-
-1. The compositor-side protocol allocates an AHB for the client image.
-2. Mesa or libhybris imports it and the GPU renders into it.
-3. The Android renderer imports the same AHB and composites it to the Activity
-   surface.
-4. Buffer release allows the producer to reuse it.
-
-Native Wayland clients use `android_wlegl` version 3, defined by
-[`graphics-protocols/wayland-android.xml`](graphics-protocols/wayland-android.xml). X11 EGL, GLX,
-and Vulkan clients use TAWC-DRI 0.4, defined by
-[`graphics-protocols/include/arlinux/tawc-dri.h`](graphics-protocols/include/arlinux/tawc-dri.h),
-through Xwayland; Xwayland forwards the same native handle to `android_wlegl`.
-
-The current protocols do not carry explicit acquire or release fences.
-Producers finish GPU work before presentation, and the compositor finishes
-sampling before releasing a buffer. Normal accelerated presentation performs
-no CPU pixel readback and no full-frame shared-memory copy. `wl_shm` remains the
-standard software-buffer path for ordinary 2D clients. Standard Linux DMA-BUF
-and DRI3 support remains available where the driver can satisfy it, but a bare
-DMA-BUF cannot represent every Android vendor handle and is not the portable
-host boundary.
-
-The host selects and configures the driver globally. A distribution installs
-its normal Wayland, X11, XCB, EGL, GL, and Vulkan client libraries and must not
-replace the runtime GPU overlay. See [Graphics acceleration](docs/GRAPHICS.md)
-for implementation details and current limitations.
+The distribution installs its normal Wayland, X11, XCB, EGL, GL, and Vulkan
+client libraries and must not replace the runtime GPU overlay. Standard
+`wl_shm`, Linux DMA-BUF, and DRI3 remain available when their backends support
+them; AHB is the portable accelerated host boundary. See
+[Graphics acceleration](GRAPHICS.md) for data flow, performance characteristics,
+and current limitations, and the [graphics protocol package](../graphics-protocols/README.md)
+for wire definitions.
 
 ## Hosted Android input method
 

@@ -3,25 +3,23 @@
 This package is the wire definition shared by Arlinux Xwayland, anlabwc,
 Mesa's Arlinux WSI patch and the libhybris Wayland/X11 clients.
 
-This directory contains graphics buffer transport definitions only, not the
-complete host/guest protocol (input, accessibility, lifecycle or other services).
+The [runtime protocol](../docs/RUNTIME-PROTOCOL.md#graphics-acceleration-and-presentation)
+defines the host/guest contract. [Graphics acceleration](../docs/GRAPHICS.md)
+explains the rendering paths and limitations. This package contains only the
+wire definitions consumed by graphics implementations:
 
-- `include/arlinux/tawc-dri.h`: TAWC-DRI 0.4 request/reply/XGE layouts, constants
+- [`include/arlinux/tawc-dri.h`](include/arlinux/tawc-dri.h): TAWC-DRI 0.4
+  request/reply/XGE layouts, constants
   and compile-time wire-size checks. Xwayland's `tawcdriproto.h` only aliases
   these types to X server names.
-- `wayland-android.xml`: android_wlegl v3. Each consumer generates its own
-  client/server bindings from this XML; none vendors a second XML copy.
+- [`wayland-android.xml`](wayland-android.xml): android_wlegl v3. Each consumer
+  generates its own client/server bindings from this XML; none vendors a second
+  XML copy.
 
 Set the target pkg-config search path to this directory. Meson consumers use
 `dependency('arlinux-wsi-protocols')`; libhybris uses the same package through
 Autoconf. Arlinux's build scripts supply the path. A standalone libhybris build
 accepts `ARLINUX_WSI_PROTOCOL_DIR` and snapshots the package with its inputs.
-
-The transports carry Android native handles and buffer metadata. They do not
-merge Turnip's Qualcomm DMA-BUF import with Mali's Android Vulkan HAL import:
-those are driver-specific operations behind the same presentation contract.
-Producers finish GPU work before sending buffers. Compositor release permits
-reuse; the current protocol has no explicit acquire/release fences.
 
 TAWC-DRI 0.4 adds `PresentBuffer2` with an explicit OPAQUE flag. The original
 `PresentBuffer` retains its premultiplied-alpha behavior regardless of X visual

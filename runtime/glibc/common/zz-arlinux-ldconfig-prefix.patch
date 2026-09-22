@@ -4,7 +4,7 @@
  /* Path to root for chroot.  */
  static char *opt_chroot;
  
-+/* This static tool cannot use the guest's LD_PRELOAD path translation.
++/* Syscall path translation does not rewrite strings stored in ld.so.cache.
 +   Store real paths in the cache: the unprivileged Android loader does not
 +   live in a chroot either. Keep Debian configuration files unmodified. */
 +static char *

@@ -29,11 +29,11 @@ The host creates a private, mode-`0700` runtime directory and exports at least:
 | `PULSE_SERVER` | `unix:$XDG_RUNTIME_DIR/pulse-native`. |
 | `HOME` | Persistent home directory of the selected instance. |
 
-The runtime also supplies loader, library, timezone, DNS, and device-driver
-environment required by bionicx. Distribution profiles must not override the
-reserved `BIONICX_*`, `LD_PRELOAD`, or `LD_LIBRARY_PATH` values. Processes
-should inherit the session environment and launch applications with their
-normal command lines.
+The host supplies the initial loader, library, timezone, DNS, and device-driver
+environment. The bundled glibc owns Linux ABI adaptations; no compatibility
+preload library is injected. Distribution profiles must not override reserved
+`BIONICX_*` or `LD_LIBRARY_PATH` values, or inject `LD_PRELOAD`. Processes should
+inherit the session environment and launch applications with normal command lines.
 
 All filesystem sockets described below are ephemeral. The host removes stale
 runtime endpoints when starting or switching an instance. A client must treat

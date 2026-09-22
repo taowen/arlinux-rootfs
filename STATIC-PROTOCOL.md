@@ -42,7 +42,6 @@ bionicx/lib/ld-linux-aarch64.so.1
 bionicx/lib/libc.so.6
 bionicx/lib/libm.so.6
 bionicx/lib/ldconfig
-bionicx/lib/libbionicx-runtime.so
 bionicx/sudo
 ```
 

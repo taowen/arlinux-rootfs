@@ -5,12 +5,12 @@
 #include <string.h>
 #include <unistd.h>
 
-/* Package-transaction launcher. execve()s with an explicit envp so the
- * runtime does not refill DISPLAY/D-Bus from the xterm session. */
+/* Package-transaction launcher. This selects a guest identity, not Android
+ * privilege escalation. Session variables are intentionally not inherited. */
 
 int main(int argc, char **argv) {
-    const char *root, *files, *tmp, *preload, *home, *term, *dns;
-    char pathbuf[4096], homebuf[512], termbuf[256], preloadbuf[512];
+    const char *root, *files, *tmp, *home, *term, *dns;
+    char pathbuf[4096], homebuf[512], termbuf[256];
     char rootbuf[512], filesbuf[512], tmpbuf[512], tmpdirbuf[512];
     char dnsbuf[512], dpkgbuf[512];
     char *envp[24];
@@ -23,9 +23,7 @@ int main(int argc, char **argv) {
     root = getenv("BIONICX_ROOTFS");
     files = getenv("BIONICX_FILES");
     tmp = getenv("BIONICX_TMPDIR");
-    preload = getenv("LD_PRELOAD");
-    if (root == NULL || root[0] != '/' || files == NULL || tmp == NULL ||
-            preload == NULL) {
+    if (root == NULL || root[0] != '/' || files == NULL || tmp == NULL) {
         fprintf(stderr, "sudo: missing BIONICX runtime environment\n");
         return 1;
     }
@@ -41,8 +39,6 @@ int main(int argc, char **argv) {
             snprintf(termbuf, sizeof(termbuf), "TERM=%s",
                     term != NULL && term[0] != '\0' ? term : "dumb") >=
                     (int)sizeof(termbuf) ||
-            snprintf(preloadbuf, sizeof(preloadbuf), "LD_PRELOAD=%s",
-                    preload) >= (int)sizeof(preloadbuf) ||
             snprintf(rootbuf, sizeof(rootbuf), "BIONICX_ROOTFS=%s", root) >=
                     (int)sizeof(rootbuf) ||
             snprintf(filesbuf, sizeof(filesbuf), "BIONICX_FILES=%s", files) >=
@@ -61,7 +57,6 @@ int main(int argc, char **argv) {
     envp[n++] = termbuf;
     envp[n++] = (char *)"LANG=C.UTF-8";
     envp[n++] = (char *)"LC_ALL=C.UTF-8";
-    envp[n++] = preloadbuf;
     envp[n++] = rootbuf;
     envp[n++] = filesbuf;
     envp[n++] = tmpbuf;

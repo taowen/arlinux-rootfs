@@ -55,7 +55,7 @@ seed_rootfs() (
 
 input_id() {
     local product="$1"
-    local inputs=(native/bionicx-runtime runtime protocols examples tools/build tools/arlinux-app-data)
+    local inputs=(runtime protocols examples tools/build tools/arlinux-app-data)
     {
         git ls-files -s -- "${inputs[@]}"
         git diff --binary -- "${inputs[@]}"
@@ -94,21 +94,9 @@ done
 [[ ${#pending[@]} -gt 0 ]] || exit 0
 
 echo '== Linux runtime and examples =='
-runtime_sources=(
-  native/bionicx-runtime/android-kernel.c native/bionicx-runtime/dns.c
-  native/bionicx-runtime/fhs-path.c native/bionicx-runtime/fhs-env.c
-  native/bionicx-runtime/fhs-exec.c native/bionicx-runtime/fhs-fork.c
-  native/bionicx-runtime/fhs-pty.c native/bionicx-runtime/fhs-metadata.c
-  native/bionicx-runtime/identity.c native/bionicx-runtime/namespace.c
-  native/bionicx-runtime/waitid-emu.c)
 for product in "${pending[@]}"; do
     output="build/linux/runtime/$product"; mkdir -p "$output"
-    aarch64-linux-gnu-gcc -shared -fPIC -O2 -Wall -Wextra -Werror \
-      -Wno-error=unused-result -Wno-error=nonnull-compare \
-      -DBIONICX_GLIBC_INTERPOSE -I"distributions/$product/native" \
-      "${runtime_sources[@]}" -o "$output/libbionicx-runtime.so" \
-      -Wl,-z,now -ldl -pthread -Wl,--version-script=native/bionicx-runtime/glibc-interpose.map
-    aarch64-linux-gnu-gcc -O2 -Wall -Wextra -Werror native/bionicx-runtime/sudo.c -o "$output/sudo"
+    aarch64-linux-gnu-gcc -O2 -Wall -Wextra -Werror runtime/tools/sudo.c -o "$output/sudo"
 done
 teapot=build/linux/teapot; mkdir -p "$teapot"
 xml=/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml
@@ -193,7 +181,6 @@ PY
     [[ ! -f "$assets/guest/arlinux-a11y" ]] ||
       chmod 755 "$assets/guest/arlinux-a11y"
     cp "$glibc/ld-linux-aarch64.so.1" "$glibc/libc.so.6" "$glibc/libm.so.6" "$glibc/ldconfig" "$assets/bionicx/lib/"
-    cp "build/linux/runtime/$product/libbionicx-runtime.so" "$assets/bionicx/lib/"
     cp "build/linux/runtime/$product/sudo" "$assets/bionicx/sudo"
     cp "$teapot/teapot-glx" "$teapot/teapot-egl" "$assets/arlinux/"
     cp tools/arlinux-app-data/accessibility-session.sh "$assets/arlinux/"

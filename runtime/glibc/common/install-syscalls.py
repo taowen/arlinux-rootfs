@@ -18,8 +18,38 @@ def replace(path, before, after):
 
 shutil.copyfile(common / 'android-syscall.h', source / 'include/android-syscall.h')
 shutil.copyfile(common / 'android-syscall.c', source / 'misc/android-syscall.c')
-replace('misc/Makefile', 'include ../Rules', 'routines += android-syscall\n\ninclude ../Rules')
-replace('misc/Versions', '  GLIBC_PRIVATE {', '  GLIBC_PRIVATE {\n    __arlinux_root_path;')
+shutil.copyfile(common / 'android-exec.c', source / 'misc/android-exec.c')
+shutil.copyfile(common / 'android-trap.c', source / 'misc/android-trap.c')
+shutil.copyfile(common / 'android-statx.c', source / 'misc/android-statx.c')
+shutil.copyfile(common / 'android-socket.c', source / 'misc/android-socket.c')
+shutil.copyfile(common / 'android-link.c', source / 'misc/android-link.c')
+shutil.copyfile(common / 'android-namespace.c', source / 'misc/android-namespace.c')
+replace('misc/Makefile', 'include ../Rules', 'routines += android-syscall android-exec android-trap android-statx android-socket android-link android-namespace\n\ninclude ../Rules')
+clone = source / 'sysdeps/unix/sysv/linux/aarch64/clone.S'
+text = clone.read_text().replace('__clone', '__arlinux_kernel_clone')
+text = text.replace('weak_alias (__arlinux_kernel_clone, clone)', '')
+clone.write_text(text)
+# Exec adaptation uses stack-owned scratch so vfork children cannot leave
+# anonymous allocations behind in the parent's shared address space.
+replace('sysdeps/unix/sysv/linux/spawni.c', '  argv_size += (32 * 1024);', '''  size_t envc = 0;
+  while (envp && envp[envc]) ++envc;
+  argv_size += (128 * 1024) + envc * sizeof (void *);''')
+
+statx_type = 'io/bits/types/struct_statx.h'
+if 'stx_mnt_id;' not in (source / statx_type).read_text():
+    # Name the ABI field occupying the first reserved uint64_t in 2.41.
+    # The total size and all following offsets remain unchanged.
+    replace(statx_type, '__uint64_t __statx_pad2[14];',
+            '__uint64_t stx_mnt_id;\n  __uint64_t __statx_pad2[13];')
+replace('io/statx_generic.c', '#include <errno.h>', '#include <errno.h>\n#include <android-syscall.h>')
+replace('io/statx_generic.c', '  memcpy (buf, &obuf, sizeof (obuf));', '''  if (mask & 0x1000U)
+    {
+      unsigned long long id = __arlinux_mount_id (fd, path, flags);
+      _Static_assert (__builtin_offsetof (struct original_statx, stx_mnt_id) == 144,
+                      "Linux statx mount ID offset changed");
+      if (id) { obuf.stx_mnt_id = id; obuf.stx_mask |= 0x1000U; }
+    }
+  memcpy (buf, &obuf, sizeof (obuf));''')
 
 # POSIX SHM and named semaphores share the normal /dev/shm namespace. The
 # syscall boundary maps it once, including calls hidden inside libc.
@@ -43,7 +73,7 @@ assembly = '''#if IS_IN (libc)
 #include <android-syscall.h>
 #undef DO_CALL
 #define DO_CALL(name, args) \\
-  .if ARLINUX_PLATFORM_CALL (SYS_ify (name)); \\
+  .if ARLINUX_PLATFORM_CALL (SYS_ify (name)) && SYS_ify (name) != 220; \\
     stp x29, x30, [sp, -16]!; \\
     cfi_adjust_cfa_offset (16); cfi_rel_offset (x29, 0); cfi_rel_offset (x30, 8); \\
     mov x6, x5; mov x5, x4; mov x4, x3; mov x3, x2; \\
@@ -87,17 +117,48 @@ sysdep.write_text(text.replace(marker, hook + marker))
 # Translate before entering the upstream cancellation region. Keep its markers
 # and side-effect handling unchanged; only the syscall arguments are adapted.
 replace('nptl/cancellation.c', '#include "pthreadP.h"',
-        '#define ARLINUX_RAW_SYSCALL 1\n#include "pthreadP.h"\n#include <android-syscall.h>')
+        '#define ARLINUX_RAW_SYSCALL 1\n#include "pthreadP.h"\n#include <libc-lock.h>\n#include <android-syscall.h>')
 replace('nptl/cancellation.c', 'long int\n__internal_syscall_cancel (', 'static long int\nandroid_raw_syscall_cancel (')
 path = source / 'nptl/cancellation.c'
 text = path.read_text()
 marker = '/* Called by the SYSCALL_CANCEL macro'
-wrapper = '''long int
+wrapper = '''static void
+android_close_socket_directory (void *opaque)
+{
+  int fd = *(int *) opaque;
+  if (fd >= 0) INTERNAL_SYSCALL_CALL (close, fd);
+}
+
+long int
 __internal_syscall_cancel (__syscall_arg_t a1, __syscall_arg_t a2,
                            __syscall_arg_t a3, __syscall_arg_t a4,
                            __syscall_arg_t a5, __syscall_arg_t a6,
                            __SYSCALL_CANCEL7_ARG_DEF __syscall_arg_t nr)
 {
+  if (ARLINUX_NAMESPACE_CALL (nr))
+    {
+      long arguments[6] = {a1, a2, a3, a4, a5, a6}, result;
+      if (__arlinux_namespace_call (nr, arguments, &result)) return result;
+      if (nr == 95 || nr == 260)
+        {
+          __arlinux_namespace_wait_prepare (nr, arguments);
+          result = android_raw_syscall_cancel (arguments[0], arguments[1], arguments[2],
+            arguments[3], arguments[4], arguments[5], __SYSCALL_CANCEL7_ARG nr);
+          return __arlinux_namespace_wait_finish (nr, arguments, result);
+        }
+    }
+  if (ARLINUX_SOCKET_CALL (nr))
+    {
+      long arguments[6] = {a1, a2, a3, a4, a5, a6}, address[16];
+      int owned;
+      long result = __arlinux_socket_prepare (arguments, address, &owned);
+      if (result < 0) return result;
+      __libc_cleanup_push (android_close_socket_directory, &owned);
+      result = android_raw_syscall_cancel (arguments[0], arguments[1], arguments[2],
+        arguments[3], arguments[4], arguments[5], __SYSCALL_CANCEL7_ARG nr);
+      __libc_cleanup_pop (1);
+      return result;
+    }
   if (ARLINUX_PATH_CALL (nr))
     {
       long arguments[6] = {a1, a2, a3, a4, a5, a6};

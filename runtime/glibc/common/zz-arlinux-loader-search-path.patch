@@ -60,18 +60,3 @@
        if (realname == NULL)
  	fd = -1;
        else
---- a/elf/dl-open.c
-+++ b/elf/dl-open.c
-@@ -812,6 +812,12 @@
- _dl_open (const char *file, int mode, const void *caller_dlopen, Lmid_t nsid,
- 	  int argc, char *argv[], char *env[])
- {
-+  /* The process runtime supplies Android's missing filesystem/process
-+     operations through symbol interposition. Deep binding would bypass that
-+     contract. Keep the existing runtime restriction here without wrapping
-+     dlopen and changing its caller or search scope. */
-+  mode &= ~RTLD_DEEPBIND;
-+
-   if ((mode & RTLD_BINDING_MASK) == 0)
-     /* One of the flags must be set.  */
-     _dl_signal_error (EINVAL, file, NULL, N_("invalid mode for dlopen()"));

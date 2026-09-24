@@ -8,19 +8,10 @@ glibc_version="${BIONICX_GLIBC_VERSION:-2.41}"
 recipe="$repo_dir/runtime/glibc/$glibc_version"
 test -f "$recipe/recipe.env" || { echo "missing glibc recipe: $glibc_version" >&2; exit 2; }
 source "$recipe/recipe.env"
-# Winlator patches bake SYSCONFDIR as an absolute C string. relocate-prefix.py
-# can retarget that only when the app prefix stays the same byte length
-# (com.winlator == io.taowen.bx). A longer package such as io.taowen.arlinux
-# must compile --prefix for the final path; patchelf on this libc breaks NSS.
-winlator_prefix=/data/data/com.winlator/files/rootfs
-target_prefix="${BIONICX_GLIBC_PREFIX:-/data/data/io.taowen.arlinux/files/rootfs}"
-winlator_app="${winlator_prefix%/files/rootfs}"
-target_app="${target_prefix%/files/rootfs}"
-if [[ ${#winlator_app} -eq ${#target_app} ]]; then
-    source_prefix="$winlator_prefix"
-else
-    source_prefix="$target_prefix"
-fi
+# Paths compiled into the Termux-derived glibc are namespace paths. The
+# syscall boundary resolves this neutral prefix using BIONICX_ROOTFS before
+# reaching Android; no Android package name belongs in these binaries.
+source_prefix=/arlinux-rootfs
 jobs="${BIONICX_GLIBC_JOBS:-8}"
 # Standard distribution directories must work before the ldconfig trigger runs.
 # Keep them in the loader fallback search, after --library-path and the cache.
@@ -36,7 +27,7 @@ for dir in "${distribution_dirs[@]}"; do
 done
 
 verify_output() {
-    python3 - "$1" "$target_prefix" <<'PY'
+    python3 - "$1" "$source_prefix" <<'PY'
 from pathlib import Path
 import sys
 import subprocess
@@ -50,6 +41,10 @@ if "__vsyslog_chk@@GLIBC_2.17" not in symbols:
 expected_resolver = prefix + b"/etc/resolv.conf"
 if expected_resolver not in libc:
     raise SystemExit("glibc contract: fixed rootfs resolver path is absent")
+for name in ("libc.so.6", "ld-linux-aarch64.so.1", "ldconfig"):
+    binary = (output / name).read_bytes()
+    if b"io.taowen.arlinux" in binary or b"/data/user/0/" in binary:
+        raise SystemExit(f"glibc contract: Android package path in {name}")
 
 # Android app seccomp traps these calls even before glibc can observe ENOSYS.
 # The pinned source recipe must compile them out; runtime instruction rewriting
@@ -68,7 +63,7 @@ PY
 mkdir -p "$cache_dir"
 definition_hash="$({
     printf '%s\n' "$glibc_version" "$glibc_sha256" "$package_commit" \
-        "$source_prefix" "$target_prefix" "$library_dirs"
+        "$source_prefix" "$library_dirs"
     find "$recipe" "$repo_dir/runtime/glibc/common" -maxdepth 1 -type f -print0 \
       | sort -z | xargs -0 sha256sum | cut -d ' ' -f1
     sha256sum "$0" | cut -d ' ' -f1
@@ -265,11 +260,6 @@ aarch64-linux-gnu-strip --strip-unneeded \
     "$temporary/output/ld-linux-aarch64.so.1" \
     "$temporary/output/libm.so.6" \
     "$temporary/output/ldconfig"
-if [[ "$source_prefix" != "$target_prefix" ]]; then
-    "$repo_dir/tools/relocate-prefix.py" "$temporary/output" \
-        --from-prefix "${source_prefix%/files/rootfs}" \
-        --to-prefix "${target_prefix%/files/rootfs}"
-fi
 verify_output "$temporary/output"
 
 printf '%s\n' \

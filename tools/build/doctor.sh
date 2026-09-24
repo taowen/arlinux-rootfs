@@ -3,7 +3,7 @@ set -euo pipefail
 
 required=(
   aarch64-linux-gnu-gcc aarch64-linux-gnu-g++ aarch64-linux-gnu-pkg-config
-  autoconf automake curl debootstrap file git glslangValidator jq libtoolize
+  autoconf automake bsdtar curl debootstrap file git glslangValidator jq libtoolize
   make meson ninja patchelf python3 readelf sha256sum tar wayland-scanner zstd
 )
 missing=()

@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
-"""Pack or verify a self-contained Arlinux distribution bundle (protocol v2)."""
+"""Pack or verify a self-contained Arlinux distribution bundle (protocol v3)."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
-import os
 from pathlib import Path
 import re
 import zipfile
 
 
-PROTOCOL = 2
-HOST_PACKAGE = os.environ.get("ARLINUX_HOST_PACKAGE", "io.taowen.arlinux")
+PROTOCOL = 3
 PAYLOADS = ("rootfs.tar.zst", "rootfs-seed-id", "gpu-qualcomm.tar.zst", "gpu-qualcomm-id",
             "gpu-generic.tar.zst", "gpu-generic-id", "guest.properties", "bionicx/lib/ld-linux-aarch64.so.1",
             "bionicx/lib/libc.so.6", "bionicx/lib/libm.so.6",
@@ -34,8 +32,8 @@ def check_manifest(manifest: dict) -> None:
         raise ValueError("unsupported rootfs protocol")
     if not IDENTIFIER.fullmatch(manifest.get("distributionId", "")):
         raise ValueError("invalid distribution ID")
-    if manifest.get("hostPackage") != HOST_PACKAGE:
-        raise ValueError("rootfs was built for another Android host")
+    if "hostPackage" in manifest:
+        raise ValueError("bundle must not name an Android package")
     if manifest.get("compositor") not in ("anlabwc", "hyprland"):
         raise ValueError("invalid compositor hint")
     for key in ("requiredFiles", "libraryDirectories"):
@@ -66,7 +64,6 @@ def pack(product: Path, target: Path) -> None:
         "protocol": PROTOCOL,
         "distributionId": product.name,
         "name": config["name"],
-        "hostPackage": HOST_PACKAGE,
         "compositor": config.get("compositor", "anlabwc"),
         "requiredFiles": config["requiredFiles"],
         "libraryDirectories": config["libraryDirectories"],

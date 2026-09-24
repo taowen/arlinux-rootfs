@@ -5,8 +5,6 @@ set -euo pipefail
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo"
 export ARLINUX_CACHE_DIR="${ARLINUX_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/arlinux}"
-host_package="${ARLINUX_HOST_PACKAGE:-io.taowen.arlinux}"
-device_root="/data/user/0/$host_package/files/rootfs"
 rebuild=false
 if [[ "${1:-}" == --rebuild ]]; then rebuild=true; shift; fi
 products=("$@")
@@ -53,6 +51,58 @@ seed_rootfs() (
     cp -a --reflink=auto "$entry/rootfs/." "$destination/"
 )
 
+# The pinned OpenCode package is part of the distribution, not a first-boot
+# network dependency. Keep downloaded artifacts outside the source tree.
+embed_opencode() {
+    local product_dir="$1" rootfs="$2"
+    local name version expected url extension cache partial actual
+    [[ -f "$product_dir/guest/opencode-downloads.tsv" ]] || return 0
+    IFS=$'\t' read -r name version expected url < <(
+        awk -F '\t' '$1 == "opencode-desktop" { print; exit }' \
+            "$product_dir/guest/opencode-downloads.tsv")
+    [[ "$name" == opencode-desktop && "$expected" =~ ^[0-9a-f]{64}$ &&
+       "$url" == https://* ]] || {
+        echo "Invalid OpenCode manifest: $product_dir" >&2; return 1;
+    }
+    extension="${url##*.}"
+    [[ "$extension" == deb || "$extension" == rpm ]] || {
+        echo "Unsupported OpenCode package: $url" >&2; return 1;
+    }
+    mkdir -p "$ARLINUX_CACHE_DIR/downloads"
+    cache="$ARLINUX_CACHE_DIR/downloads/$expected.$extension"
+    actual="$(sha256sum "$cache" 2>/dev/null | cut -d' ' -f1 || true)"
+    if [[ "$actual" != "$expected" ]]; then
+        partial="$(mktemp "$cache.part.XXXXXXXX")"
+        echo "Downloading OpenCode Desktop $version for $(basename "$product_dir")..."
+        if ! curl -fL --retry 3 --connect-timeout 20 -o "$partial" "$url"; then
+            rm -f "$partial"; return 1
+        fi
+        actual="$(sha256sum "$partial" | cut -d' ' -f1)"
+        if [[ "$actual" != "$expected" ]]; then
+            rm -f "$partial"
+            echo "OpenCode Desktop SHA-256 verification failed" >&2
+            return 1
+        fi
+        mv -f "$partial" "$cache"
+    fi
+    if [[ "$extension" == rpm ]]; then
+        # Arch's OpenCode artifact is an RPM, but its payload is ordinary Linux
+        # files. Unpack it once on the build host; the phone needs no RPM tool.
+        bsdtar -xpf "$cache" -C "$rootfs"
+        [[ -f "$rootfs/opt/OpenCode/ai.opencode.desktop" &&
+           -f "$rootfs/opt/OpenCode/chrome-sandbox" ]] || {
+            echo "OpenCode RPM is missing its executable files" >&2; return 1;
+        }
+        install -d "$rootfs/usr/bin"
+        ln -sfn /opt/OpenCode/ai.opencode.desktop "$rootfs/usr/bin/ai.opencode.desktop"
+        chmod 755 "$rootfs/opt/OpenCode/ai.opencode.desktop" \
+            "$rootfs/opt/OpenCode/chrome-sandbox"
+        printf '%s\n' "$version" > "$rootfs/opt/OpenCode/.arlinux-version"
+    else
+        install -Dm644 "$cache" "$rootfs/usr/lib/arlinux/packages/opencode-desktop.deb"
+    fi
+}
+
 input_id() {
     local product="$1"
     local inputs=(runtime graphics-protocols examples tools/build tools/arlinux-app-data)
@@ -72,7 +122,6 @@ input_id() {
                 | sort -z | xargs -0 -r sha256sum)
         git -C "distributions/$product" submodule status --recursive || true
         printf '%s\n' "$gpu_inputs"
-        printf '%s\n' "$host_package"
         true
     } | sha256sum | cut -d' ' -f1
 }
@@ -120,9 +169,21 @@ for product in "${pending[@]}"; do
     version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["glibcVersion"])' "distributions/$product/product.json")"
     dirs="$(python3 -c 'import json,sys; print(":".join(json.load(open(sys.argv[1]))["libraryDirectories"]))' "distributions/$product/product.json")"
     glibc_outputs[$product]="$(BIONICX_GLIBC_VERSION="$version" \
-      BIONICX_GLIBC_PREFIX="$device_root" \
       BIONICX_GLIBC_LIBRARY_DIRS="$dirs" "$repo/tools/build/linux-glibc.sh" | tail -n 1)"
 done
+
+# Every GPU library finds its neighbours relative to its own location. The
+# exact Android app-private directory is supplied only when the guest runs.
+set_relative_rpath() {
+    local tree="$1" library="$2" origin entry rpath="" relative
+    origin="$(dirname "$library")"
+    for entry in usr/lib/mesa usr/lib/arlinux-platform usr/lib lib \
+                 usr/lib/hybris usr/lib/hybris/libhybris; do
+        relative="$(realpath -m --relative-to="$origin" "$tree/$entry")"
+        rpath+="${rpath:+:}\$ORIGIN/$relative"
+    done
+    patchelf --set-rpath "$rpath" "$library"
+}
 
 echo '== Product root filesystems =='
 stage="${ARLINUX_PRODUCT_STAGE:-$ARLINUX_CACHE_DIR/products}"; mkdir -p "$stage"
@@ -131,6 +192,7 @@ for product in "${pending[@]}"; do
     assets="$product_dir/build/assets"; glibc="${glibc_outputs[$product]}"
     rm -rf "$stage/$product" "$assets"; mkdir -p "$rootfs" "$assets"
     seed_rootfs "$product" "$rootfs"
+    embed_opencode "$product_dir" "$rootfs"
     python3 - "$product_dir/product.json" "$rootfs" <<'PY'
 import json, os, pathlib, sys
 product = json.loads(pathlib.Path(sys.argv[1]).read_text())
@@ -193,8 +255,7 @@ PY
       --exclude=./var/run --exclude=./var/lock -cf - . | zstd -T0 -8 -f -o "$assets/rootfs.tar.zst"
     sha256sum "$assets/rootfs.tar.zst" | cut -d' ' -f1 > "$assets/rootfs-seed-id"
 
-    overlay="$stage/$product/gpu"; deploy="$device_root"
-    rpath="$deploy/usr/lib/mesa:$deploy/usr/lib/arlinux-platform:$deploy/usr/lib:$deploy/lib"
+    overlay="$stage/$product/gpu"
     mkdir -p "$overlay/usr/lib/mesa/dri" \
       "$overlay/usr/lib/arlinux/vulkan" "$overlay/usr/share/vulkan/icd.d"
     cp -a "$mesa"/libEGL.so* "$mesa"/libGLESv2.so* "$mesa"/libGL.so* "$mesa"/libgallium-*.so \
@@ -212,7 +273,9 @@ import json,pathlib,sys
 pathlib.Path(sys.argv[1]).write_text(json.dumps({'file_format_version':'1.0.0','ICD':{'library_path':'../../../lib/mesa/libvulkan_freedreno.so','api_version':sys.argv[2]}},indent=2)+'\n')
 PY
     cp "$overlay/usr/share/vulkan/icd.d/freedreno_icd.json" "$overlay/usr/share/vulkan/icd.d/arlinux_icd.json"
-    while IFS= read -r -d '' library; do readelf -h "$library" >/dev/null 2>&1 && patchelf --set-rpath "$rpath" "$library"; done < <(find "$overlay/usr/lib/mesa" -type f -print0)
+    while IFS= read -r -d '' library; do
+      readelf -h "$library" >/dev/null 2>&1 && set_relative_rpath "$overlay" "$library"
+    done < <(find "$overlay/usr/lib/mesa" -type f -print0)
     tar -C "$overlay" --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf - . | zstd -T0 -19 -f -o "$assets/gpu-qualcomm.tar.zst"
     sha256sum "$assets/gpu-qualcomm.tar.zst" | cut -d' ' -f1 > "$assets/gpu-qualcomm-id"
 
@@ -232,7 +295,7 @@ PY
     cp "$generic/usr/share/vulkan/icd.d/hybris_icd.json" "$generic/usr/share/vulkan/icd.d/arlinux_icd.json"
     while IFS= read -r -d '' library; do
       if readelf -h "$library" >/dev/null 2>&1; then
-        patchelf --set-rpath "$rpath:$deploy/usr/lib/hybris:$deploy/usr/lib/hybris/libhybris" "$library"
+        set_relative_rpath "$generic" "$library"
       fi
     done < <(find "$generic/usr/lib/hybris" -type f -print0)
     tar -C "$generic" --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf - . | zstd -T0 -19 -f -o "$assets/gpu-generic.tar.zst"

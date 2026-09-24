@@ -248,5 +248,13 @@ Before publishing a distribution:
 7. Rotation and output resize do not require restarting the desktop session.
 8. License and third-party notices are preserved.
 
+Publish the verified `out/<id>.zip` as an asset of the distribution
+repository's GitHub Release. GitHub's automatically generated source archive
+is not an installable bundle. `tools/publish-distribution.sh <id> <tag>` is the
+reference maintainer workflow: it requires committed inputs, builds and
+verifies the bundle, records the framework and distribution commits plus the
+SHA-256, and creates the release using GitHub CLI. The rootfs framework does
+not host bundles for individual distributions.
+
 `arlinux-lxqt` is maintained as the external-reference test: it is developed as
 an independent repository using only this documented interface.

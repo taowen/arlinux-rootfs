@@ -34,6 +34,7 @@ extern long __arlinux_socket_prepare (long[6], void *, int *)
 extern unsigned long long __arlinux_mount_id (int, const char *, int)
   __attribute__ ((visibility ("hidden")));
 extern int __arlinux_virtual_root (void) __attribute__ ((visibility ("hidden")));
+extern const char *__arlinux_rootfs (void) __attribute__ ((visibility ("hidden")));
 extern long __arlinux_exec (int, const char *, char *const[], char *const[], int)
   __attribute__ ((visibility ("hidden")));
 extern long __arlinux_path_prepare (long, long[6], char[8192])

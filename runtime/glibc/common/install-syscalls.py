@@ -22,6 +22,17 @@ shutil.copyfile(common / 'android-path.h', source / 'include/android-path.h')
 # pathname resolver directly, so alternatives/symlinked DSOs work at startup.
 replace('elf/dl-load.c', '#include <sysdep.h>',
         '#include <sysdep.h>\n#include <android-path.h>')
+replace('elf/dl-misc.c', '#include <unistd.h>',
+        '#include <unistd.h>\n#include <sysdep.h>\n#include <android-path.h>')
+replace('elf/dl-misc.c',
+        '  int fd = __open64_nocancel (file, O_RDONLY | O_CLOEXEC);', '''  char rooted[4096];
+  long pathname = (long) file;
+  long status = android_root_path (&pathname, rooted);
+  int fd = -1;
+  if (status < 0)
+    __set_errno (-status);
+  else
+    fd = __open64_nocancel ((const char *) pathname, O_RDONLY | O_CLOEXEC);''')
 replace('elf/dl-load.c', '    fd = __open64_nocancel (name, O_RDONLY | O_CLOEXEC);', '''    {
       char rooted[4096], resolved[4096];
       long path = (long) name;

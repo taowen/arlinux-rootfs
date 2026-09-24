@@ -1,4 +1,4 @@
-# Static bundle protocol v2
+# Static bundle protocol v3
 
 This document defines the persistent, host-independent contract of an
 `.zip` distribution bundle. Runtime communication between the
@@ -10,10 +10,9 @@ installed guest and the Android host is defined separately in
 A bundle is a ZIP64 archive whose payload members are stored without ZIP
 compression. `manifest.json` is the only top-level metadata source. It contains:
 
-- `protocol`: the integer `2`;
+- `protocol`: the integer `3`;
 - `distributionId`: a stable `[a-z][a-z0-9-]{0,63}` identifier;
 - `name`: the display name;
-- `hostPackage`: `io.taowen.arlinux`;
 - `compositor`: the default host compositor hint, `anlabwc` or `hyprland`;
 - `requiredFiles`: rootfs-relative paths that must exist before installation;
 - `libraryDirectories`: rootfs-relative dynamic-library directories;
@@ -27,7 +26,7 @@ and signing policy.
 
 ## Required payloads
 
-Protocol 2 requires:
+Protocol 3 requires:
 
 ```text
 rootfs.tar.zst
@@ -73,16 +72,16 @@ bundle must be staged and verified before use and must not erase an existing
 instance. `instance.json` records the distribution identity, display name,
 compositor hint, and digest-named bundle directory used by the instance.
 
-The compatibility runtime currently requires the fixed absolute guest path
-`/data/user/0/io.taowen.arlinux/files/rootfs`. Before launch, the host makes
-`files/rootfs` refer to the selected instance. Only one instance runs at a time.
+The compatibility runtime obtains the app-private rootfs path from
+`BIONICX_ROOTFS`; bundles do not name an Android package. Before launch, the
+host makes `files/rootfs` refer to the selected instance. Only one instance runs at a time.
 Switching instances stops guest processes and the compositor, changes that
 alias atomically, clears ephemeral runtime state, and then starts a new session.
 The alias must never change while a guest process is alive.
 
 Home, launch profile, and other mutable state are instance-specific. A bundle
-must not contain an Android application ID other than the protocol's
-`hostPackage`, request Android privileges, or load Android libraries directly.
+must not embed an Android application ID, request Android privileges, or load
+Android libraries directly.
 
 ## First boot
 

@@ -14,8 +14,10 @@ gpu_id="$({
     printf '%s\n' "$mesa_revision"
     git -C "$repo/third_party/libhybris" rev-parse HEAD
     git -C "$repo/third_party/android-headers" rev-parse HEAD
-    sha256sum "$repo/tools/build/linux-gpu.sh" "$repo/tools/build/linux-aarch64.ini"
-    find "$repo/graphics-protocols" -type f -print0 | sort -z | xargs -0 sha256sum
+    (cd "$repo" && {
+        sha256sum tools/build/linux-gpu.sh tools/build/linux-aarch64.ini
+        find graphics-protocols -type f -print0 | sort -z | xargs -0 sha256sum
+    })
 } | sha256sum | cut -d' ' -f1)"
 gpu_id_file="$repo/build/linux/gpu.inputs.sha256"
 

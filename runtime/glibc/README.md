@@ -2,7 +2,7 @@
 
 Each version directory pins an upstream glibc archive and its Android patch
 recipe. `tools/build/linux-glibc.sh` builds the loader, libc, libm and ldconfig
-for the bundle's host package. Distribution applications keep their standard
+with a package-neutral namespace prefix. Distribution applications keep their standard
 glibc ABI; they do not link against a separate Arlinux API.
 
 ## Source ownership
@@ -67,7 +67,8 @@ the AArch64 kernel call. Public functions, hidden libc calls and `syscall()`
 therefore use the same translation. The loader and libc share
 `common/android-path.h` for FHS and symlink lookup; the loader uses it directly
 before libc policy is initialized. Translation uses bounded stack storage and
-does not allocate, read environment variables or call the dynamic loader.
+does not allocate or call the dynamic loader. It caches `BIONICX_ROOTFS` from
+the startup environment, so subsequent `clearenv` calls do not lose the path.
 
 `common/install-syscalls.py` installs the boundary in both supported upstream
 versions. It validates each source edit and fails if the upstream contract

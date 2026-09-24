@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Drive a guest GUI over AT-SPI (GTK/Qt, including native Wayland).
 
-Does not use XTest or screen coordinates. Buttons use Action.doAction;
-text uses EditableText.insertText / setTextContents.
+Buttons use Action.doAction. Text uses EditableText when applications expose
+it, or the standard desktop clipboard after semantically focusing a custom
+document canvas.
 """
 from __future__ import print_function
 
 import glob
 import os
 import re
+import shutil
+import subprocess
 import sys
 import time
 
@@ -98,17 +101,21 @@ def walk(acc, out, depth=0, limit=4000):
             continue
 
 
+def select_applications(entries, app_needle):
+    needle = (app_needle or "").lower()
+    if not needle:
+        return entries
+    exact = [app for app in entries if (app.name or "").lower() == needle]
+    return exact or [app for app in entries if needle in (app.name or "").lower()]
+
+
 def collect(app_needle):
     import pyatspi
     desktop = pyatspi.Registry.getDesktop(0)
     nodes = []
-    apps = []
-    needle = (app_needle or "").lower()
-    for app in desktop:
-        aname = app.name or ""
-        apps.append(aname)
-        if needle and needle not in aname.lower():
-            continue
+    entries = list(desktop)
+    apps = [(app.name or "") for app in entries]
+    for app in select_applications(entries, app_needle):
         walk(app, nodes)
     return apps, nodes
 
@@ -126,15 +133,86 @@ def _document_editor(info):
     """Return true only for an editor, never for a toolbar/dialog field.
 
     WPS exposes its font-family and font-size boxes as EditableText while its
-    document canvas is a focusable frame.  Treating any EditableText as a
-    document silently corrupts those controls, which is worse than failing.
+    license text is a large label that also claims EditableText.  Its document
+    canvas can be a focusable frame.  Treating any EditableText as a document
+    silently corrupts those controls, which is worse than failing.
     """
     role = (info["role"] or "").strip().lower()
     if role in ("document", "document text", "web document", "paragraph"):
         return True
     if _document_name(info):
         return True
-    return (int(info["w"]) >= 240 and int(info["h"]) >= 100)
+    return (role in ("text", "entry") and
+            int(info["w"]) >= 240 and int(info["h"]) >= 100)
+
+
+def paste_text(text):
+    """Paste Unicode using the desktop's standard clipboard and input tools."""
+    import pyatspi
+    if os.environ.get("DISPLAY") and shutil.which("xclip") and shutil.which("xdotool"):
+        owner = subprocess.Popen(
+            ["xclip", "-selection", "clipboard", "-in"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        try:
+            owner.stdin.write(text.encode("utf-8"))
+            owner.stdin.close()
+            time.sleep(0.1)
+            subprocess.run(
+                ["xdotool", "key", "--clearmodifiers", "ctrl+v"],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            time.sleep(0.2)
+        finally:
+            if owner.poll() is None:
+                owner.terminate()
+                try:
+                    owner.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    owner.kill()
+        return "xclip+xdotool"
+    if os.environ.get("WAYLAND_DISPLAY") and shutil.which("wl-copy"):
+        owner = subprocess.Popen(
+            ["wl-copy", "--paste-once", "--type", "text/plain;charset=utf-8"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        owner.stdin.write(text.encode("utf-8"))
+        owner.stdin.close()
+        time.sleep(0.1)
+        pyatspi.Registry.generateKeyboardEvent(37, None, pyatspi.KEY_PRESS)
+        pyatspi.Registry.generateKeyboardEvent(0, "v", pyatspi.KEY_SYM)
+        pyatspi.Registry.generateKeyboardEvent(37, None, pyatspi.KEY_RELEASE)
+        owner.wait(timeout=5)
+        return "wl-copy+AT-SPI"
+    raise RuntimeError("no standard clipboard/input tool pair is installed")
+
+
+def click_toggle_at_bounds(info):
+    """Use the semantic target's bounds when a Qt Toggle action is a no-op."""
+    if not (os.environ.get("DISPLAY") and shutil.which("xdotool")):
+        return False
+    x = int(info["x"])
+    y = int(info["y"])
+    w = int(info["w"])
+    h = int(info["h"])
+    if x < 0 or y < 0 or w < 20 or h < 20:
+        return False
+    subprocess.run(
+        ["xdotool", "mousemove", "--sync", str(x + w // 2), str(y + h // 2),
+         "click", "1"],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return True
 
 
 def choose_type_target(nodes):
@@ -172,6 +250,14 @@ def choose_type_target(nodes):
     return None, None, None
 
 
+def editable_write_result(ok, before, after, inserted_text):
+    """Return (success, verified) for readable and write-only editors."""
+    verified = (len(after) >= len(before) + len(inserted_text) and
+                inserted_text in after)
+    write_only = bool(ok and not before and not after)
+    return bool(ok and (verified or write_only)), verified
+
+
 def cmd_click(needle, app):
     last_error = None
     for attempt in range(2):
@@ -187,8 +273,8 @@ def cmd_click(needle, app):
         exact = [(a, i) for a, i in hits
                  if want in ((i["name"] or "").lower(),
                              (i["text"] or "").lower())]
-        usable = [(a, i) for a, i in exact if sized(i)] or exact \
-            or [(a, i) for a, i in hits if sized(i)] or hits
+        usable = [(a, i) for a, i in exact if sized(i)] \
+            or [(a, i) for a, i in hits if sized(i)]
         if not usable:
             sys.stderr.write("atspi-do click: no Action widget matching %r (apps=%s)\n"
                              % (needle, apps))
@@ -197,6 +283,13 @@ def cmd_click(needle, app):
         try:
             act = acc.queryAction()
             names = [act.getName(i) for i in range(act.nActions)]
+            if any((name or "").lower() == "toggle" for name in names) \
+                    and click_toggle_at_bounds(info):
+                print("click %s role=%s name=%r size=%dx%d actions=%s "
+                      "ok=True method=semantic-bounds" % (
+                          needle, info["role"], info["name"], info["w"],
+                          info["h"], names))
+                return
             ok = act.doAction(0)
             print("click %s role=%s name=%r size=%dx%d actions=%s ok=%s" % (
                 needle, info["role"], info["name"], info["w"], info["h"],
@@ -245,10 +338,11 @@ def cmd_type(text, app):
             sys.stderr.write("atspi-do type: document target could not take focus\n")
             sys.exit(1)
         time.sleep(0.1)
-        pyatspi.Registry.generateKeyboardEvent(0, text, pyatspi.KEY_STRING)
+        paste_method = paste_text(text)
         print("type %d chars into role=%s name=%r size=%dx%d "
-              "method=atspi-keyboard focused=True" % (
-                  len(text), info["role"], info["name"], info["w"], info["h"]))
+              "method=%s focused=True" % (
+                  len(text), info["role"], info["name"], info["w"], info["h"],
+                  paste_method))
         return
 
     et = acc.queryEditableText()
@@ -264,11 +358,17 @@ def cmd_type(text, app):
         after = acc.queryText().getText(0, -1) or ""
     except Exception:
         after = ""
-    inserted = len(after) >= len(before) + len(text) and text in after
+    success, inserted = editable_write_result(ok, before, after, text)
     print("type %d chars into role=%s name=%r size=%dx%d ok=%s verified=%s" % (
         len(text), info["role"], info["name"], info["w"], info["h"],
         ok, inserted))
-    if not ok or not inserted:
+    # Some hosted custom canvases implement the standard EditableText write
+    # operation but intentionally expose no readable document text.  In that
+    # case the write result is authoritative; keep verification strict when
+    # the target exposes readable content.
+    if success and not inserted:
+        print("type result is write-only; EditableText accepted the operation")
+    if not success:
         sys.stderr.write("atspi-do type: EditableText did not retain inserted text "
                          "(offset=%d before=%r after=%r)\n" %
                          (n, before[:120], after[:120]))

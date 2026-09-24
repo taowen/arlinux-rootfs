@@ -9,6 +9,30 @@
 #include <sys/vfs.h>
 #include <linux/magic.h>
 
+/* Both ld.so and libc use this helper. The loader cannot call getenv yet. */
+extern char **__environ;
+
+static const char *
+arlinux_runtime_root (void)
+{
+  static const char name[] = "BIONICX_ROOTFS=";
+  static char saved[4096];
+  if (saved[0] != 0) return saved;
+  for (char **entry = __environ; entry && *entry; ++entry)
+    if (strncmp (*entry, name, sizeof name - 1) == 0)
+      {
+        const char *root = *entry + sizeof name - 1;
+        size_t length = strnlen (root, 4096);
+        if (length > 1 && length < 4096 && root[0] == '/'
+            && root[length - 1] != '/')
+          {
+            memcpy (saved, root, length + 1);
+            return saved;
+          }
+      }
+  return NULL;
+}
+
 static int
 under (const char *path, const char *directory)
 {
@@ -26,9 +50,12 @@ android_root_path (long *argument, char *buffer)
 {
   const char *path = (const char *) *argument;
   if (path == 0 || path[0] != '/') return 0;
+  const char *root = arlinux_runtime_root ();
   const char *suffix = path;
   const char *extra = "";
-  if (under (path, "/dev/shm"))
+  if (under (path, "/arlinux-rootfs"))
+    suffix = path + sizeof ("/arlinux-rootfs") - 1;
+  else if (under (path, "/dev/shm"))
     {
       extra = "/tmp/dev-shm";
       suffix = path + 8;
@@ -40,11 +67,17 @@ android_root_path (long *argument, char *buffer)
              under (path, "/tmp") || under (path, "/run") ||
              path[1] == 0 || (path[1] == '.' && path[2] == 0)))
     return 0;
-  /* _PATH_TMP is the configured app-private prefix followed by /tmp/. */
-  const char root[] = _PATH_TMP;
+  if (root == NULL) return -ENOENT;
+  size_t root_length = strlen (root);
+  size_t extra_length = strlen (extra);
+  size_t suffix_length = strlen (suffix);
+  if (root_length + extra_length + suffix_length >= 4096)
+    return -ENAMETOOLONG;
   unsigned int out = 0;
-  for (; out < sizeof (root) - 6; ++out) buffer[out] = root[out];
-  for (unsigned int i = 0; extra[i]; ++i) buffer[out++] = extra[i];
+  memcpy (buffer, root, root_length);
+  out += root_length;
+  memcpy (buffer + out, extra, extra_length);
+  out += extra_length;
   if (extra[0])
     {
       buffer[out] = 0;

@@ -27,7 +27,7 @@ sudo apt update
 sudo apt install \
   autoconf automake binutils-aarch64-linux-gnu build-essential ca-certificates \
   curl debootstrap file g++-aarch64-linux-gnu gcc-aarch64-linux-gnu git \
-  glslang-tools jq libtool meson ninja-build patchelf pkgconf:arm64 python3 tar \
+  glslang-tools jq libarchive-tools libtool meson ninja-build patchelf pkgconf:arm64 python3 tar \
   wayland-protocols zstd \
   libegl-dev:arm64 libgl-dev:arm64 libgles-dev:arm64 libwayland-dev:arm64 \
   libx11-dev:arm64 libx11-xcb-dev:arm64 libxcb1-dev:arm64
@@ -49,6 +49,14 @@ written to `build/`, finished bundles to `out/`, and reusable downloads to
 `${XDG_CACHE_HOME:-$HOME/.cache}/arlinux`. Set `ARLINUX_CACHE_DIR` to move the
 cache.
 
+Prebuilt ZIP bundles are published as release assets in each distribution's
+own GitHub repository: [Debian](https://github.com/taowen/arlinux-debian/releases),
+[Arch](https://github.com/taowen/arlinux-arch/releases),
+[Omarchy](https://github.com/taowen/arlinux-omarchy/releases), and
+[LXQt](https://github.com/taowen/arlinux-lxqt/releases). Download the `.zip`
+asset, not GitHub's automatic source-code archive. The Android APK is released
+separately; a rootfs bundle is imported after installing it.
+
 ## Create a distribution
 
 A distribution is an independent Git repository placed at
@@ -67,6 +75,11 @@ Public reference implementations are:
 - [arlinux-arch](https://github.com/taowen/arlinux-arch)
 - [arlinux-omarchy](https://github.com/taowen/arlinux-omarchy)
 - [arlinux-lxqt](https://github.com/taowen/arlinux-lxqt)
+
+Maintainers can publish one distribution from a clean checkout with
+`tools/publish-distribution.sh <id> <tag>` after authenticating `gh`. It builds
+and verifies the bundle, then creates a release in that distribution's GitHub
+repository with the ZIP and its SHA-256 in the release notes.
 
 ## Documentation
 

@@ -182,8 +182,11 @@ execute (struct exec_storage *s, int directory, const char *path,
       if (android || !dynamic)
         return INTERNAL_SYSCALL_CALL (execve, s->script[depth], s->arguments, envp);
 
-      const char root[] = _PATH_TMP;
-      size_t root_length = sizeof root - 6;
+      const char *root = __arlinux_rootfs ();
+      if (root == NULL) return -ENOENT;
+      size_t root_length = strlen (root);
+      if (root_length + sizeof ("/usr/lib/arlinux-platform/ld-linux-aarch64.so.1")
+          >= sizeof s->loader) return -ENAMETOOLONG;
       memcpy (s->loader, root, root_length);
       strcpy (s->loader + root_length, "/usr/lib/arlinux-platform/ld-linux-aarch64.so.1");
       /* Keep the ABI implementation present even with an explicitly empty
@@ -231,7 +234,13 @@ execute (struct exec_storage *s, int directory, const char *path,
         }
       s->environment[envc] = NULL;
       memmove (s->arguments + 6, s->arguments + 1, argc * sizeof (char *));
-      s->arguments[4] = s->arguments[0];
+      /* A normal absolute argv[0] still names the guest path. Programs such
+         as Python locate their runtime relative to argv[0], before they can
+         use our filesystem boundary. Give them the corresponding physical
+         path while preserving deliberately chosen argv[0] values. */
+      s->arguments[4] = s->arguments[0] && s->arguments[0][0] == '/'
+                        && strcmp (s->arguments[0], path) == 0
+                        ? s->path : s->arguments[0];
       s->arguments[0] = s->loader;
       s->arguments[1] = (char *) "--library-path";
       s->arguments[2] = s->libraries;

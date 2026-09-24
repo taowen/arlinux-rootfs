@@ -23,6 +23,7 @@
 static int virtual_root;
 static char executable[4096];
 int __arlinux_virtual_root (void) { return virtual_root; }
+const char *__arlinux_rootfs (void) { return arlinux_runtime_root (); }
 
 static int
 process_executable (const char *path)
@@ -47,6 +48,8 @@ process_executable (const char *path)
 static void __attribute__ ((constructor))
 initialize_identity (void)
 {
+  /* Cache the root before applications can clear or replace their env. */
+  arlinux_runtime_root ();
   __arlinux_namespace_init (getenv ("BIONICX_NS_STATE"));
   const char *value = getenv ("BIONICX_VIRTUAL_ROOT");
   virtual_root = value != 0 && value[0] != 0
@@ -75,11 +78,9 @@ proc_version (const char *path, char buffer[4096])
   if (native >= 0)
     { INTERNAL_SYSCALL_CALL (close, native); return 0; }
   if (native != -EACCES && native != -EPERM) return 0;
-  const char root[] = _PATH_TMP;
-  size_t length = sizeof root - 1;
-  if (length + sizeof ("arlinux-proc-version") > 4096) return -ENAMETOOLONG;
-  memcpy (buffer, root, length);
-  memcpy (buffer + length, "arlinux-proc-version", sizeof ("arlinux-proc-version"));
+  long rooted = (long) "/tmp/arlinux-proc-version";
+  long translated = android_root_path (&rooted, buffer);
+  if (translated < 0) return translated;
   struct utsname info;
   long result = INTERNAL_SYSCALL_CALL (uname, &info);
   if (result < 0) return result;
@@ -209,18 +210,16 @@ __arlinux_android_syscall (long number, long a0, long a1, long a2,
     {
       const char *path = (const char *) a0;
       if (!path) return -EFAULT;
-      const char root[] = _PATH_TMP;
-      size_t length = sizeof root - 6;
+      const char *root = __arlinux_rootfs ();
+      if (root == NULL) return -ENOENT;
+      size_t length = strlen (root);
       if (!strcmp (path, "/") || (!strncmp (path, root, length) &&
           (!path[length] || (path[length] == '/' && !path[length + 1])))) return 0;
-      char actual_root[sizeof root];
-      memcpy (actual_root, root, length);
-      actual_root[length] = 0;
       struct stat requested, expected;
       long result = INTERNAL_SYSCALL_CALL (newfstatat, AT_FDCWD, path, &requested, 0);
       if (result < 0) return result;
       if (!S_ISDIR (requested.st_mode)) return -ENOTDIR;
-      result = INTERNAL_SYSCALL_CALL (newfstatat, AT_FDCWD, actual_root, &expected, 0);
+      result = INTERNAL_SYSCALL_CALL (newfstatat, AT_FDCWD, root, &expected, 0);
       if (result < 0) return result;
       if (requested.st_dev == expected.st_dev && requested.st_ino == expected.st_ino)
         return 0;

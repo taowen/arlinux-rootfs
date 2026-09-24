@@ -160,8 +160,12 @@ compatibility backend, not a claim of complete kernel IPC equivalence.
 Timer descriptors use the normal glibc wrappers and the kernel timerfd ABI.
 There is no replacement backed by eventfd or timer threads.
 
-`common/close_range.c` extends the generic libc fallback used by the Android
-recipe with `CLOSE_RANGE_CLOEXEC`. Standard descriptors are treated like any
+`common/close_range.c` uses upstream glibc's allocation-free procfs walker
+when closing all descriptors above a lower bound, as child startup normally
+does. Cost follows open descriptors rather than the descriptor limit; the
+upstream implementation handles exhausted descriptors and lowered limits.
+Bounded ranges retain the generic libc implementation, extended with
+`CLOSE_RANGE_CLOEXEC`. Standard descriptors are treated like any
 other requested descriptor. `CLOSE_RANGE_UNSHARE` returns `ENOSYS` without
 changing the shared descriptor table; pretending to unshare would affect
 other threads.

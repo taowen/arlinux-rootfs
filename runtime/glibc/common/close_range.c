@@ -18,6 +18,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <not-cancel.h>
 #include <unistd.h>
 
@@ -36,6 +37,22 @@ __close_range (unsigned int first, unsigned int last, int flags)
     {
       __set_errno (ENOSYS);
       return -1;
+    }
+  /* The common exec preparation case closes everything above a low fd.
+     Use upstream's allocation-free procfs walker instead of issuing one
+     close syscall per possible descriptor (32768 on Android). It also
+     handles EMFILE and descriptors above a subsequently lowered limit.
+     Retain the generic path if procfs is unavailable. */
+  if (flags == 0 && last >= INT_MAX)
+    {
+      if (first > INT_MAX)
+        return 0;
+      int saved_errno = errno;
+      if (__closefrom_fallback ((int) first, true))
+        {
+          __set_errno (saved_errno);
+          return 0;
+        }
     }
   int maxfd = __getdtablesize ();
   if (maxfd < 0)

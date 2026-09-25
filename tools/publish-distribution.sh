@@ -41,7 +41,7 @@ checksum="$(sha256sum "$bundle" | cut -d' ' -f1)"
 size="$(stat -c %s "$bundle")"
 protocol="$(python3 -c 'import json,sys,zipfile; print(json.loads(zipfile.ZipFile(sys.argv[1]).read("manifest.json"))["protocol"])' "$bundle")"
 framework_commit="$(git -C "$repo" rev-parse HEAD)"
-notes="$(printf 'Import this ZIP bundle into ARLinux 0.1.3 or later. The repository source archive is not the installable rootfs bundle. The bundle works with both the release and development Android package IDs.\n\n- Bundle protocol: %s\n- Distribution commit: `%s`\n- arlinux-rootfs commit: `%s`\n- Bundle size: %s bytes\n- SHA-256 (`%s.zip`): `%s`\n' "$protocol" "$commit" "$framework_commit" "$size" "$id" "$checksum")"
+notes="$(printf 'Import this ZIP bundle into ARLinux 0.1.4 or later. The repository source archive is not the installable rootfs bundle. The bundle works with both the release and development Android package IDs.\n\n- Bundle protocol: %s\n- Distribution commit: `%s`\n- arlinux-rootfs commit: `%s`\n- Bundle size: %s bytes\n- SHA-256 (`%s.zip`): `%s`\n' "$protocol" "$commit" "$framework_commit" "$size" "$id" "$checksum")"
 gh release create "$tag" "$bundle" -R "$github_repo" \
     --target "$commit" --title "$name $tag" --notes "$notes"
 gh release view "$tag" -R "$github_repo" --json assets \

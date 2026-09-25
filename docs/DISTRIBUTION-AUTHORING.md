@@ -55,7 +55,6 @@ conform to [`schemas/product.schema.json`](../schemas/product.schema.json).
   "$schema": "../../schemas/product.schema.json",
   "name": "My Linux",
   "compositor": "anlabwc",
-  "glibcVersion": "2.43",
   "libraryDirectories": ["usr/lib"],
   "requiredFiles": ["usr/bin/sh", "etc/os-release"],
   "environment": {
@@ -64,8 +63,6 @@ conform to [`schemas/product.schema.json`](../schemas/product.schema.json).
 }
 ```
 
-- `glibcVersion` must have a matching `runtime/glibc/<version>/recipe.env` in
-  `arlinux-rootfs`. It must match the distribution libc ABI.
 - `compositor` is a default hint. Use `anlabwc` for a stacking desktop and
   `hyprland` for a Hyprland session.
 - `libraryDirectories` are rootfs-relative dynamic-library directories.
@@ -197,10 +194,10 @@ from the runtime described in [graphics support](GRAPHICS.md).
 ## Compatibility boundary
 
 Distributions do not provide native compatibility hooks. Filesystem paths,
-symlinks and child execution are handled by the shared glibc runtime. Preserve
+symlinks and child execution are handled by the host's tawcroot runtime. Preserve
 package-owned scripts and symlink contents instead of rewriting them for the
 Android installation directory. The Android launcher handles the first guest
-execution before glibc is active.
+execution through tawcroot.
 
 Use the package manager's documented configuration for installation policy.
 Graphics transport and desktop accessibility belong to their respective

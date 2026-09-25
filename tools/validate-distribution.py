@@ -11,7 +11,6 @@ import sys
 
 IDENTIFIER = re.compile(r"[a-z][a-z0-9-]{0,63}\Z")
 ENVIRONMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
-GLIBC_VERSION = re.compile(r"[0-9]+\.[0-9]+\Z")
 
 
 def fail(message: str) -> None:
@@ -46,7 +45,7 @@ def validate(directory: Path) -> None:
     product_path = directory / "product.json"
     product = load_object(product_path)
     allowed = {
-        "$schema", "name", "compositor", "glibcVersion", "libraryDirectories",
+        "$schema", "name", "compositor", "libraryDirectories",
         "requiredFiles", "environment",
     }
     unknown = sorted(set(product) - allowed)
@@ -56,9 +55,6 @@ def validate(directory: Path) -> None:
         fail("product.json name must be a non-empty string")
     if product.get("compositor", "anlabwc") not in ("anlabwc", "hyprland"):
         fail("product.json compositor must be anlabwc or hyprland")
-    glibc = product.get("glibcVersion")
-    if not isinstance(glibc, str) or not GLIBC_VERSION.fullmatch(glibc):
-        fail("product.json glibcVersion must look like 2.43")
     for field in ("libraryDirectories", "requiredFiles"):
         values = product.get(field)
         if not isinstance(values, list) or not values:
@@ -73,9 +69,6 @@ def validate(directory: Path) -> None:
     ):
         fail("product.json environment must map environment names to strings")
 
-    recipe = Path(__file__).resolve().parents[1] / "runtime/glibc" / glibc / "recipe.env"
-    if not recipe.is_file():
-        fail(f"arlinux-rootfs has no glibc {glibc} recipe")
     seed = directory / "tools/seed.sh"
     if not seed.is_file() or seed.stat().st_mode & 0o111 == 0:
         fail("tools/seed.sh must exist and be executable")
@@ -89,7 +82,7 @@ def validate(directory: Path) -> None:
     if data.get("schemaVersion") != 3 or not isinstance(data.get("launch"), dict):
         fail("profile.json must be a schemaVersion 3 launch profile")
 
-    print(f"OK distribution {identifier}: {product['name']} (glibc {glibc})")
+    print(f"OK distribution {identifier}: {product['name']} (stock distribution runtime)")
 
 
 if __name__ == "__main__":

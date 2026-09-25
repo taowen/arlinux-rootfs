@@ -30,7 +30,7 @@ The host creates a private, mode-`0700` runtime directory and exports at least:
 | `HOME` | Persistent home directory of the selected instance. |
 
 The host supplies the initial loader, library, timezone, DNS, and device-driver
-environment. The bundled glibc owns Linux ABI adaptations; no compatibility
+environment. The host-packaged tawcroot owns Linux syscall adaptations; no compatibility
 preload library is injected. Distribution profiles must not override reserved
 `BIONICX_*` or `LD_LIBRARY_PATH` values, or inject `LD_PRELOAD`. Processes should
 inherit the session environment and launch applications with normal command lines.

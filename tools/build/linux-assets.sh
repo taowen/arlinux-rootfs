@@ -145,7 +145,7 @@ done
 echo '== Linux runtime and examples =='
 for product in "${pending[@]}"; do
     output="build/linux/runtime/$product"; mkdir -p "$output"
-    aarch64-linux-gnu-gcc -O2 -Wall -Wextra -Werror runtime/tools/sudo.c -o "$output/sudo"
+    aarch64-linux-gnu-gcc -O2 -Wall -Wextra -Werror runtime/tools/guest-sudo.c -o "$output/sudo"
 done
 teapot=build/linux/teapot; mkdir -p "$teapot"
 xml=/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml
@@ -164,20 +164,13 @@ echo '== Linux GPU stack =='
 "$repo/tools/build/linux-gpu.sh"
 mesa="$repo/build/linux/mesa/lib"
 hybris="$repo/build/linux/libhybris/install/usr/lib/hybris"
-declare -A glibc_outputs
-for product in "${pending[@]}"; do
-    version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["glibcVersion"])' "distributions/$product/product.json")"
-    dirs="$(python3 -c 'import json,sys; print(":".join(json.load(open(sys.argv[1]))["libraryDirectories"]))' "distributions/$product/product.json")"
-    glibc_outputs[$product]="$(BIONICX_GLIBC_VERSION="$version" \
-      BIONICX_GLIBC_LIBRARY_DIRS="$dirs" "$repo/tools/build/linux-glibc.sh" | tail -n 1)"
-done
 
 # Every GPU library finds its neighbours relative to its own location. The
 # exact Android app-private directory is supplied only when the guest runs.
 set_relative_rpath() {
     local tree="$1" library="$2" origin entry rpath="" relative
     origin="$(dirname "$library")"
-    for entry in usr/lib/mesa usr/lib/arlinux-platform usr/lib lib \
+    for entry in usr/lib/mesa usr/lib lib \
                  usr/lib/hybris usr/lib/hybris/libhybris; do
         relative="$(realpath -m --relative-to="$origin" "$tree/$entry")"
         rpath+="${rpath:+:}\$ORIGIN/$relative"
@@ -189,7 +182,7 @@ echo '== Product root filesystems =='
 stage="${ARLINUX_PRODUCT_STAGE:-$ARLINUX_CACHE_DIR/products}"; mkdir -p "$stage"
 for product in "${pending[@]}"; do
     product_dir="$repo/distributions/$product"; rootfs="$stage/$product/rootfs"
-    assets="$product_dir/build/assets"; glibc="${glibc_outputs[$product]}"
+    assets="$product_dir/build/assets"
     rm -rf "$stage/$product" "$assets"; mkdir -p "$rootfs" "$assets"
     seed_rootfs "$product" "$rootfs"
     embed_opencode "$product_dir" "$rootfs"
@@ -202,7 +195,7 @@ missing = [path for path in product['requiredFiles']
 if missing:
     raise SystemExit('rootfs seed is missing required files: ' + ', '.join(missing))
 PY
-    mkdir -p "$rootfs/usr/lib/arlinux/guest" "$rootfs/usr/lib/arlinux-platform"
+    mkdir -p "$rootfs/usr/lib/arlinux/guest"
     cp tools/arlinux-app-data/hosted-ime.py tools/arlinux-app-data/org.arlinux.HostedInput.service \
       "$rootfs/usr/lib/arlinux/"
     install -Dm644 tools/arlinux-app-data/org.arlinux.HostedInput.service \
@@ -214,12 +207,10 @@ PY
       "$rootfs/usr/lib/arlinux/guest/"*.sh
     [[ ! -f "$rootfs/usr/lib/arlinux/guest/arlinux-a11y" ]] ||
       chmod 755 "$rootfs/usr/lib/arlinux/guest/arlinux-a11y"
-    cp "$glibc/ld-linux-aarch64.so.1" "$glibc/libc.so.6" "$glibc/libm.so.6" "$glibc/ldconfig" \
-      "$rootfs/usr/lib/arlinux-platform/"
     python3 - "$rootfs" <<'PY'
 import os, pathlib, sys
 root = pathlib.Path(sys.argv[1])
-# Keep package-owned shebangs and symlink contents unchanged. Guest libc
+# Keep package-owned shebangs and symlink contents unchanged. tawcroot
 # resolves Linux paths; rewriting files here creates a second path policy.
 for name, contents in [('etc/resolv.conf','nameserver 1.1.1.1\n'), ('etc/machine-id','')]:
     path = root / name
@@ -230,13 +221,12 @@ mtab = root / 'etc/mtab'
 if not os.path.lexists(mtab):
     mtab.symlink_to('/proc/self/mounts')
 PY
-    mkdir -p "$assets/bionicx/lib" "$assets/arlinux"
+    mkdir -p "$assets/bionicx" "$assets/arlinux"
     cp -a "$product_dir/guest" "$assets/guest"
     cp examples/desk-auto/dump-atspi.py examples/desk-auto/atspi-do.py "$assets/guest/"
     chmod 755 "$assets/guest/"*.py "$assets/guest/"*.sh
     [[ ! -f "$assets/guest/arlinux-a11y" ]] ||
       chmod 755 "$assets/guest/arlinux-a11y"
-    cp "$glibc/ld-linux-aarch64.so.1" "$glibc/libc.so.6" "$glibc/libm.so.6" "$glibc/ldconfig" "$assets/bionicx/lib/"
     cp "build/linux/runtime/$product/sudo" "$assets/bionicx/sudo"
     cp "$teapot/teapot-glx" "$teapot/teapot-egl" "$assets/arlinux/"
     cp tools/arlinux-app-data/accessibility-session.sh "$assets/arlinux/"

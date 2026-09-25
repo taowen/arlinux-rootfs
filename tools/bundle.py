@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pack or verify a self-contained Arlinux distribution bundle (protocol v3)."""
+"""Pack or verify a self-contained Arlinux distribution bundle (protocol v4)."""
 
 from __future__ import annotations
 
@@ -11,12 +11,9 @@ import re
 import zipfile
 
 
-PROTOCOL = 3
+PROTOCOL = 4
 PAYLOADS = ("rootfs.tar.zst", "rootfs-seed-id", "gpu-qualcomm.tar.zst", "gpu-qualcomm-id",
-            "gpu-generic.tar.zst", "gpu-generic-id", "guest.properties", "bionicx/lib/ld-linux-aarch64.so.1",
-            "bionicx/lib/libc.so.6", "bionicx/lib/libm.so.6",
-            "bionicx/lib/ldconfig",
-            "bionicx/sudo", "profile.json")
+            "gpu-generic.tar.zst", "gpu-generic-id", "guest.properties", "bionicx/sudo", "profile.json")
 IDENTIFIER = re.compile(r"[a-z][a-z0-9-]{0,63}\Z")
 
 

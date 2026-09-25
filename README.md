@@ -8,7 +8,7 @@ inspect, or extend a distribution.
 A bundle contains:
 
 - a distribution-owned root filesystem;
-- the bionicx glibc compatibility runtime;
+- distribution-native glibc and loader, executed by the host's tawcroot runtime;
 - a Qualcomm Turnip/Zink graphics overlay;
 - a launch profile and a versioned manifest.
 
@@ -94,14 +94,14 @@ repository with the ZIP and its SHA-256 in the release notes.
 
 The [graphics protocol package](graphics-protocols/README.md) documents wire
 definitions for Xwayland, Mesa, libhybris, and compositor developers. The
-[glibc runtime notes](runtime/glibc/README.md) cover libc implementation and
-maintenance. Distribution authors normally need the documents above.
+The Android host uses [tawcroot](https://github.com/taowen/tawc/tree/main/tawcroot)
+for syscall compatibility; distribution libc packages remain unmodified.
 
 ## Repository boundaries
 
 Distribution repositories own package selection, rootfs creation, first-boot
 configuration, launch profiles, and distribution-specific compatibility
-policy. This repository owns the bundle format, glibc bridge, graphics stack,
+policy. This repository owns the bundle format, guest integration, graphics stack,
 cross-build tooling, validation, and shared guest support.
 
 Android UI, input, lifecycle, and bundle installation belong to the private

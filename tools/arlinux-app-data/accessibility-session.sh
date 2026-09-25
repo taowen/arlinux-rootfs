@@ -2,6 +2,11 @@
 # Publish the AT-SPI bus before starting the desktop application.
 set -eu
 
+# Start the same standard input bridge for every desktop using this session.
+# Waiting for activation avoids launching toolkit clients before IBus is ready.
+dbus-send --session --print-reply --dest=org.arlinux.HostedInput \
+    /org/arlinux/HostedInput org.freedesktop.DBus.Peer.Ping >/dev/null
+
 if command -v dbus-send >/dev/null 2>&1; then
     tries=0
     address=

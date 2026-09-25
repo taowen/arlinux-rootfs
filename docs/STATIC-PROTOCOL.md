@@ -1,4 +1,4 @@
-# Static bundle protocol v3
+# Static bundle protocol v4
 
 This document defines the persistent, host-independent contract of an
 `.zip` distribution bundle. Runtime communication between the
@@ -10,7 +10,7 @@ installed guest and the Android host is defined separately in
 A bundle is a ZIP64 archive whose payload members are stored without ZIP
 compression. `manifest.json` is the only top-level metadata source. It contains:
 
-- `protocol`: the integer `3`;
+- `protocol`: the integer `4`;
 - `distributionId`: a stable `[a-z][a-z0-9-]{0,63}` identifier;
 - `name`: the display name;
 - `compositor`: the default host compositor hint, `anlabwc` or `hyprland`;
@@ -26,7 +26,7 @@ and signing policy.
 
 ## Required payloads
 
-Protocol 3 requires:
+Protocol 4 requires:
 
 ```text
 rootfs.tar.zst
@@ -37,10 +37,6 @@ gpu-generic.tar.zst
 gpu-generic-id
 guest.properties
 profile.json
-bionicx/lib/ld-linux-aarch64.so.1
-bionicx/lib/libc.so.6
-bionicx/lib/libm.so.6
-bionicx/lib/ldconfig
 bionicx/sudo
 ```
 
@@ -72,7 +68,9 @@ bundle must be staged and verified before use and must not erase an existing
 instance. `instance.json` records the distribution identity, display name,
 compositor hint, and digest-named bundle directory used by the instance.
 
-The compatibility runtime obtains the app-private rootfs path from
+The host launches the selected rootfs through its packaged tawcroot executable.
+The guest retains its distribution's original glibc and dynamic loader; neither
+is replaced by a platform overlay. Session helpers obtain the rootfs path from
 `BIONICX_ROOTFS`; bundles do not name an Android package. Before launch, the
 host makes `files/rootfs` refer to the selected instance. Only one instance runs at a time.
 Switching instances stops guest processes and the compositor, changes that

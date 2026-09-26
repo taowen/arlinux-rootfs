@@ -35,8 +35,8 @@ preload library is injected. Distribution profiles must not override reserved
 `BIONICX_*` or `LD_LIBRARY_PATH` values, or inject `LD_PRELOAD`. Processes should
 inherit the session environment and launch applications with normal command lines.
 
-All filesystem sockets described below are ephemeral. The host removes stale
-runtime endpoints when starting or switching an instance. A client must treat
+Session sockets are ephemeral. The host removes stale filesystem endpoints
+when starting or switching an instance. A client must treat
 disconnect as session termination and must not replay an uncertain operation
 after reconnecting.
 
@@ -127,6 +127,23 @@ The host exposes a standard PulseAudio native-protocol socket at
 `$XDG_RUNTIME_DIR/pulse-native` and routes its sink to Android AAudio. Guest
 applications use `PULSE_SERVER`; ALSA applications can use the distribution's
 standard PulseAudio plugin. Applications do not open the Android audio HAL.
+
+## Optional Arch package transactions
+
+An ordinary desktop process retains the Android app UID; it cannot run pacman
+as root. The host can perform a narrowly scoped transaction with its existing
+virtual-root launcher, which changes neither the Android UID nor the host
+device's privileges. Omarchy's `omarchy-pacman` client connects to the
+abstract Unix stream socket `arlinux-pacman-<app-uid>` (where `<app-uid>` is
+`id -u`). The host accepts only peers with the same Android app UID.
+
+The client sends one ASCII line: `update` or `install PACKAGE...`. Package
+names contain only letters, digits, `@._+-`; options and arbitrary commands
+are not accepted. The host runs `pacman -Syu --noconfirm` or
+`pacman -S --needed --noconfirm PACKAGE...`, streams its output, then ends
+with `Package transaction exited N`. The client must wait for the socket to
+close and must not retry a disconnected transaction because its outcome may be
+unknown. Other distributions do not need this optional service.
 
 ## Accessibility
 

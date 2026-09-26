@@ -103,43 +103,6 @@ embed_opencode() {
     fi
 }
 
-# Codex CLI is a native ARM64 binary. Bundle the verified upstream npm platform
-# archive at build time; the phone neither needs Node.js nor downloads it on boot.
-embed_codex() {
-    local product_dir="$1" rootfs="$2"
-    local name version expected url cache partial actual target
-    [[ -f "$product_dir/guest/codex-downloads.tsv" ]] || return 0
-    IFS=$'\t' read -r name version expected url < "$product_dir/guest/codex-downloads.tsv"
-    [[ "$name" == codex-cli && "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ &&
-       "$expected" =~ ^[0-9a-f]{64}$ && "$url" == https://*.tgz ]] || {
-        echo "Invalid Codex CLI manifest: $product_dir" >&2; return 1;
-    }
-    mkdir -p "$ARLINUX_CACHE_DIR/downloads"
-    cache="$ARLINUX_CACHE_DIR/downloads/$expected.tgz"
-    actual="$(sha256sum "$cache" 2>/dev/null | cut -d' ' -f1 || true)"
-    if [[ "$actual" != "$expected" ]]; then
-        partial="$(mktemp "$cache.part.XXXXXXXX")"
-        echo "Downloading Codex CLI $version for $(basename "$product_dir")..."
-        if ! curl -fL --retry 3 --connect-timeout 20 -o "$partial" "$url"; then
-            rm -f "$partial"; return 1
-        fi
-        actual="$(sha256sum "$partial" | cut -d' ' -f1)"
-        if [[ "$actual" != "$expected" ]]; then
-            rm -f "$partial"
-            echo "Codex CLI SHA-256 verification failed" >&2
-            return 1
-        fi
-        mv -f "$partial" "$cache"
-    fi
-    target="$rootfs/opt/codex-$version"
-    mkdir -p "$target" "$rootfs/usr/bin"
-    tar -xzf "$cache" -C "$target" --strip-components=3
-    [[ -x "$target/bin/codex" ]] || {
-        echo "Codex CLI executable is missing from the upstream archive" >&2; return 1;
-    }
-    ln -sfn "/opt/codex-$version/bin/codex" "$rootfs/usr/bin/codex"
-}
-
 input_id() {
     local product="$1"
     local inputs=(runtime graphics-protocols examples tools/build tools/arlinux-app-data)
@@ -223,7 +186,6 @@ for product in "${pending[@]}"; do
     rm -rf "$stage/$product" "$assets"; mkdir -p "$rootfs" "$assets"
     seed_rootfs "$product" "$rootfs"
     embed_opencode "$product_dir" "$rootfs"
-    embed_codex "$product_dir" "$rootfs"
     python3 - "$product_dir/product.json" "$rootfs" <<'PY'
 import json, os, pathlib, sys
 product = json.loads(pathlib.Path(sys.argv[1]).read_text())

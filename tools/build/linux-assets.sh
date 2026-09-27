@@ -146,6 +146,7 @@ echo '== Linux runtime and examples =='
 for product in "${pending[@]}"; do
     output="build/linux/runtime/$product"; mkdir -p "$output"
     aarch64-linux-gnu-gcc -O2 -Wall -Wextra -Werror runtime/tools/guest-sudo.c -o "$output/sudo"
+    aarch64-linux-gnu-gcc -O2 -Wall -Wextra -Werror runtime/tools/bwrap-compat.c -o "$output/bwrap"
 done
 teapot=build/linux/teapot; mkdir -p "$teapot"
 xml=/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml
@@ -196,6 +197,7 @@ if missing:
     raise SystemExit('rootfs seed is missing required files: ' + ', '.join(missing))
 PY
     mkdir -p "$rootfs/usr/lib/arlinux/guest"
+    install -Dm755 "build/linux/runtime/$product/bwrap" "$rootfs/usr/local/bin/bwrap"
     cp tools/arlinux-app-data/hosted-ime.py tools/arlinux-app-data/org.arlinux.HostedInput.service \
       "$rootfs/usr/lib/arlinux/"
     install -Dm644 tools/arlinux-app-data/org.arlinux.HostedInput.service \

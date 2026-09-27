@@ -35,6 +35,26 @@ preload library is injected. Distribution profiles must not override reserved
 `BIONICX_*` or `LD_LIBRARY_PATH` values, or inject `LD_PRELOAD`. Processes should
 inherit the session environment and launch applications with normal command lines.
 
+### Sandbox compatibility is not isolation
+
+The Android app sandbox remains the security boundary. Linux instances and
+projects are not separate security boundaries; run only trusted guest software.
+The runtime accepts guest seccomp filter installation without enforcing those
+filters, because they can conflict with its syscall translation. Android's own
+restrictions remain active. Seccomp notification listeners are not supported.
+
+The shared builder installs `/usr/local/bin/bwrap`, a non-isolating command
+launcher. Distribution `PATH` includes `/usr/local/bin` before `/usr/bin`.
+It supports command arguments, environment, working directory, process lifecycle
+and identity binds (source and destination already refer to the same object).
+Namespace, read-only mount and directory-masking options add no isolation; the
+launcher reports this on stderr. It never changes shared directory permissions
+to imitate a private mount. Unknown setup options and non-identity binds fail.
+This is not general Flatpak support or a replacement for real Bubblewrap security.
+
+Optional applications remain user-installed. No Codex configuration is installed;
+applications discovering `bwrap` through `PATH` use this compatibility entry point.
+
 Session sockets are ephemeral. The host removes stale filesystem endpoints
 when starting or switching an instance. A client must treat
 disconnect as session termination and must not replay an uncertain operation

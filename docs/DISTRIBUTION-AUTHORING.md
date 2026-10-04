@@ -45,6 +45,29 @@ my-linux/
 
 Run `./build.sh validate distributions/my-linux` before a full build.
 
+For an offline-ready Debian desktop, install packages natively in a disposable
+Android build instance instead of emulating ARM64 on the build host:
+
+```sh
+./build.sh build debian
+cp out/debian.zip out/debian-seed.zip
+python3 tools/device-desktop.py prepare out/debian-seed.zip out/debian-prepare.zip
+# Import debian-prepare.zip into a NEW build-only instance. Allow its package
+# installer to finish, stop all its processes, and export ONLY its rootfs as tar.
+python3 tools/device-desktop.py seal out/debian-seed.zip device-rootfs.tar out/debian.zip
+```
+
+The preparation ZIP explicitly invokes Debian's `guest/build-desktop.sh`.
+The final ZIP restores the local-only `guest/first-boot.sh`. Sealing removes
+device identities, host launchers, selected GPU overlays, logs and caches; the
+bundle retains both GPU overlays for selection on the destination phone.
+Never use a personal instance or export its home directory. Keep network
+downloads in preparation; `guest/first-boot.sh` only writes device-local
+configuration. Do not bake in an Android package name, UID or instance directory.
+An offline-ready image writes `usr/share/arlinux/offline-desktop` containing `1`;
+the builder exports the same marker as a checksummed bundle asset. The marker
+declares a property, not a test: verify a fresh instance with networking disabled.
+
 ## `product.json`
 
 `product.json` declares data needed by the generic builder and host. It must
@@ -79,8 +102,9 @@ distributions and instances share one host application.
 `tools/seed.sh OUTPUT` must create an AArch64 root filesystem at `OUTPUT`. The
 builder invokes it as the regular build user. It may download a signed upstream
 bootstrap, run `debootstrap --foreign`, or assemble another package-manager
-owned seed. It must not use QEMU, chroot into AArch64, contact an Android device,
-or depend on the private host repository.
+owned seed. The seed build does not execute ARM64 code or require an Android
+device. Optional offline desktop preparation executes package configuration on
+a real ARM64 device. Neither step needs access to the private host source code.
 
 Make network inputs reproducible. Record immutable URLs, upstream versions,
 commits, and SHA-256 hashes in `rootfs.lock.json`. A rolling repository should
@@ -118,8 +142,10 @@ details and current limitations.
 ## First boot
 
 Files under `guest/` are installed at `/usr/lib/arlinux/guest`. An executable
-`guest/first-boot.sh` completes architecture-native package configuration on
-the Android device. It receives these important variables:
+`guest/first-boot.sh` prepares per-device and per-instance configuration on
+Android. Offline-ready distributions must finish package configuration in the
+build-time preparation hook, not here. Optional network-dependent distributions
+may install packages at first boot. The script receives these important variables:
 
 - `BIONICX_ROOTFS`: absolute rootfs path;
 - `BIONICX_FILES`: host application files directory;

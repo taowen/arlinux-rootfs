@@ -224,6 +224,9 @@ if not os.path.lexists(mtab):
     mtab.symlink_to('/proc/self/mounts')
 PY
     mkdir -p "$assets/bionicx" "$assets/arlinux"
+    if [[ -f "$rootfs/usr/share/arlinux/offline-desktop" ]]; then
+        cp "$rootfs/usr/share/arlinux/offline-desktop" "$assets/offline-desktop"
+    fi
     cp -a "$product_dir/guest" "$assets/guest"
     cp examples/desk-auto/dump-atspi.py examples/desk-auto/atspi-do.py "$assets/guest/"
     chmod 755 "$assets/guest/"*.py "$assets/guest/"*.sh

@@ -21,3 +21,6 @@
 [submodule "distributions/lxqt"]
 	path = distributions/lxqt
 	url = https://github.com/taowen/arlinux-lxqt.git
+[submodule "distributions/yibu"]
+	path = distributions/yibu
+	url = https://github.com/taowen/arlinux-yibu.git

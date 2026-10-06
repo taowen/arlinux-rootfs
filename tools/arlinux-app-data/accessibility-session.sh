@@ -2,6 +2,9 @@
 # Publish the AT-SPI bus before starting the desktop application.
 set -eu
 
+# Out-of-process launchers rejoin this session without inspecting /proc.
+printf '%s\n' "$DBUS_SESSION_BUS_ADDRESS" > "$XDG_RUNTIME_DIR/desktop-session-bus"
+
 # Start the same standard input bridge for every desktop using this session.
 # Waiting for activation avoids launching toolkit clients before IBus is ready.
 dbus-send --session --print-reply --dest=org.arlinux.HostedInput \

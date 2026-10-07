@@ -20,8 +20,8 @@ CDN = 'https://client-update.fastly.steamstatic.com/'
 CHANNELS = ('stable', 'publicbeta')
 
 
-def manifest(text):
-    """Read Valve's quoted KeyValues manifest, including nested component blocks."""
+def keyvalues(text):
+    """Read Valve's quoted KeyValues, including nested blocks."""
     tokens = re.findall(r'"(?:\\.|[^"\\])*"|[{}]', text)
     position = 0
 
@@ -39,12 +39,16 @@ def manifest(text):
                 raise ValueError('Invalid manifest key')
             value = tokens[position]
             position += 1
-            result[json.loads(key)] = block(True) if value == '{' else json.loads(value)
+            result[json.loads(key, strict=False)] = block(True) if value == '{' else json.loads(value, strict=False)
         if nested:
             raise ValueError('Unclosed manifest block')
         return result
 
-    return block()['linuxarm64']
+    return block()
+
+
+def manifest(text):
+    return keyvalues(text)['linuxarm64']
 
 
 def digest(path):
@@ -229,8 +233,8 @@ def launch(root, arguments):
         raise RuntimeError('Steam installation has no native ARM64 executable')
     ensure_dependencies()
     links(root)
-    from steam_fex import register
-    register(root)
+    from steam_fex import configure
+    configure(root)
     # Steam rewrites LD_LIBRARY_PATH for each game. FEX still needs the
     # desktop's ARM64 graphics libraries on the host side of its thunks.
     os.environ['ARLINUX_STEAM_HOST_LIBRARY_PATH'] = os.environ.get('LD_LIBRARY_PATH', '')

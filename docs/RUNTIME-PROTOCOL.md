@@ -126,8 +126,9 @@ The launcher directly runs `steamrtarm64/steam` and handles updater exit code
 discovery follows the approach demonstrated by
 [DroidDeck](https://github.com/Droid-Deck/DroidDeck/blob/main/tools/linuxfs/overlay/usr/local/bin/droiddeck-steam-install).
 
-On Debian-based desktops, native x86-64 Linux games can use the registered
-**ARLinux Linux x86-64 (FEX)** tool in Steam's per-game Compatibility settings.
+On Debian-based desktops, the launcher registers and selects
+**ARLinux Linux x86-64 (FEX)** before starting Steam. Existing user-selected
+tools and per-game overrides are preserved. No Valve executables are replaced.
 Install **FEX-Emu** (3127680) and **Steam Linux Runtime 3.0 (sniper)** (1628350)
 through Steam first. The first game launch prepares a private runtime under
 `$XDG_CACHE_HOME/arlinux/steam-fex`, downloading signed Debian Bookworm base

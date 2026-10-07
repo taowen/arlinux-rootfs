@@ -36,6 +36,58 @@ def register(steam):
         path.chmod(0o755 if name == 'run' else 0o644)
 
 
+def configure(steam):
+    """Select the Linux/FEX runtime before Steam reads its configuration.
+
+    Native game metadata has priority 90, overriding the usual default 75.
+    A user-priority default avoids Android's unavailable pressure-vessel
+    namespaces. Explicit per-game choices remain untouched. Never replace
+    Valve executables or change a running client's configuration.
+    """
+    register(steam)
+    pidfile = Path.home()/'.steam/steam.pid'
+    if pidfile.is_file():
+        try:
+            pid = int(pidfile.read_text().strip())
+            if pid <= 0:
+                raise ValueError('Invalid Steam PID')
+            os.kill(pid, 0)
+            return
+        except ProcessLookupError:
+            pass
+        except (ValueError, PermissionError):
+            raise RuntimeError('Cannot safely determine whether Steam is running')
+    path = steam/'config/config.vdf'
+    from steam import keyvalues
+    data = keyvalues(path.read_text()) if path.exists() else {}
+    node = data
+    for name in ('InstallConfigStore', 'Software', 'Valve', 'Steam', 'CompatToolMapping'):
+        node = node.setdefault(name, {})
+    current = node.get('0')
+    if current and current.get('name') != 'arlinux-fex':
+        return  # Preserve a user-selected default compatibility tool.
+    setting = {'name': 'arlinux-fex', 'config': '', 'priority': '250'}
+    if current == setting:
+        return
+    node['0'] = setting
+    def dump(block, indent=0):
+        lines = []
+        for key, value in block.items():
+            prefix = '\t'*indent + json.dumps(key, ensure_ascii=False)
+            if isinstance(value, dict):
+                lines += [prefix, '\t'*indent+'{', dump(value, indent+1), '\t'*indent+'}']
+            else:
+                lines.append(prefix+'\t'+json.dumps(value, ensure_ascii=False))
+        return '\n'.join(lines)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    backup = path.with_suffix('.arlinux-backup')
+    if path.is_file() and not backup.exists():
+        shutil.copy2(path, backup)
+    temporary = path.with_suffix('.arlinux-tmp')
+    temporary.write_text(dump(data)+'\n')
+    temporary.replace(path)
+
+
 def app_directory(steam, appid):
     libraries = [steam]
     listing = steam/'steamapps/libraryfolders.vdf'

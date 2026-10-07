@@ -114,10 +114,16 @@ def extract(archive, directory):
 def links(root):
     steam = Path.home()/'.steam'
     steam.mkdir(exist_ok=True)
-    for name, target in {'root': root, 'steam': root, 'bin64': root/'steamrtarm64',
-                         'binarm64': root/'steamrtarm64', 'sdk64': root/'linuxarm64',
-                         'sdkarm64': root/'linuxarm64'}.items():
+    # Steam uses separate SDK directories for x86-64 and ARM64 clients. Games
+    # load ~/.steam/sdk64/steamclient.so even when Steam itself runs on ARM64.
+    targets = {'root': root, 'steam': root, 'bin64': root/'steamrtarm64',
+                         'binarm64': root/'steamrtarm64', 'sdk64': root/'linux64',
+                         'sdkarm64': root/'linuxarm64'}
+    old_targets = {'sdk64': root/'linuxarm64'}
+    for name, target in targets.items():
         path = steam/name
+        if name in old_targets and path.is_symlink() and path.resolve() == old_targets[name]:
+            path.unlink()
         if path.is_symlink() or path.exists():
             if path.resolve() != target:
                 raise RuntimeError(f'Preserving another Steam installation: {path}')
@@ -205,6 +211,11 @@ def launch(root, arguments):
     if not binary.is_file():
         raise RuntimeError('Steam installation has no native ARM64 executable')
     links(root)
+    from steam_fex import register
+    register(root)
+    # Steam rewrites LD_LIBRARY_PATH for each game. FEX still needs the
+    # desktop's ARM64 graphics libraries on the host side of its thunks.
+    os.environ['ARLINUX_STEAM_HOST_LIBRARY_PATH'] = os.environ.get('LD_LIBRARY_PATH', '')
     os.chdir(root)
     while True:
         result = subprocess.run([str(binary), *arguments])

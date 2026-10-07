@@ -122,10 +122,26 @@ The default is Valve's stable ARM64 channel. `--channel publicbeta` opts into
 the public beta; `--channel stable` returns to the stable client.
 
 The launcher directly runs `steamrtarm64/steam` and handles updater exit code
-42. It does not add sandbox/GPU arguments or provide x86 emulation, Proton,
-controller integration, or a claim of game compatibility. ARM64 channel
+42. It does not add sandbox/GPU arguments. ARM64 channel
 discovery follows the approach demonstrated by
 [DroidDeck](https://github.com/Droid-Deck/DroidDeck/blob/main/tools/linuxfs/overlay/usr/local/bin/droiddeck-steam-install).
+
+On Debian-based desktops, native x86-64 Linux games can use the registered
+**ARLinux Linux x86-64 (FEX)** tool in Steam's per-game Compatibility settings.
+Install **FEX-Emu** (3127680) and **Steam Linux Runtime 3.0 (sniper)** (1628350)
+through Steam first. The first game launch prepares a private runtime under
+`$XDG_CACHE_HOME/arlinux/steam-fex`, downloading signed Debian Bookworm base
+libraries through APT from the Tsinghua mirror. It does not replace the
+desktop's ARM64 libraries. Steam SDK links select x86-64 for `sdk64` and
+ARM64 for `sdkarm64`.
+
+The tool runs Valve's FEX directly, without pressure-vessel: Android apps
+cannot create its user namespaces. This is **not a game sandbox**. FEX's
+GL/Vulkan thunks use the desktop's native ARM64 graphics stack; guest library
+paths are kept separate. This does not provide Proton, Windows-game support
+or touchscreen game controls, and compatibility remains game-specific.
+The Steam compatibility-tool approach also builds on
+[DroidDeck's Linux FEX integration](https://github.com/Droid-Deck/DroidDeck/blob/main/tools/linuxfs/overlay/usr/local/bin/droiddeck-fex).
 
 ## Hosted Android applications
 

@@ -45,9 +45,13 @@ def app_directory(steam, appid):
     for library in libraries:
         manifest = library/f'steamapps/appmanifest_{appid}.acf'
         if manifest.exists():
-            name = re.search(r'"installdir"\s+"([^"]+)"', manifest.read_text())
-            if name:
-                return library/'steamapps/common'/name[1]
+            contents = manifest.read_text()
+            state = re.search(r'"StateFlags"\s+"(\d+)"', contents)
+            name = re.search(r'"installdir"\s+"([^"]+)"', contents)
+            if name and state and int(state[1]) & 4:
+                directory = library/'steamapps/common'/name[1]
+                if directory.is_dir():
+                    return directory
     name = {'3127680': 'FEX-Emu', '1628350': 'Steam Linux Runtime 3.0 (sniper)'}.get(appid, appid)
     raise RuntimeError(f'Install {name} through Steam first: steam://install/{appid}')
 
@@ -205,6 +209,9 @@ def launch(verb, command):
     if not command:
         raise ValueError('Missing game command')
     steam = (Path(os.environ.get('XDG_DATA_HOME', Path.home()/'.local/share'))/'Steam').resolve()
+    # Preparation also spawns native APT/dpkg processes, which must not
+    # inherit Steam's foreign-architecture overlay.
+    os.environ.pop('LD_PRELOAD', None)
     fex, root = prepare(steam)
     env = os.environ.copy()
     # Steam's native ARM64 overlay cannot be preloaded into the x86 process.

@@ -81,6 +81,23 @@ def dependencies():
                            'GTK2, PipeWire, libnm, lsof, NSS, Xss, ALSA and PulseAudio')
 
 
+def ensure_dependencies():
+    """Repair missing host dependencies even for an existing installation."""
+    libraries = ('libgtk-x11-2.0.so.0', 'libpipewire-0.3.so.0', 'libnm.so.0',
+                 'libnss3.so', 'libXss.so.1', 'libasound.so.2', 'libpulse.so.0',
+                 'libSDL2-2.0.so.0', 'libopenal.so.1')
+    missing = []
+    for name in libraries:
+        try:
+            ctypes.CDLL(name)
+        except OSError:
+            missing.append(name)
+    missing += [name for name in ('curl', 'lsof') if not shutil.which(name)]
+    if missing:
+        print('Installing Steam dependencies: ' + ', '.join(missing), flush=True)
+        dependencies()
+
+
 def extract(archive, directory):
     """Stage checked components; reject paths and links escaping the installation."""
     with zipfile.ZipFile(archive) as source:
@@ -210,6 +227,7 @@ def launch(root, arguments):
     binary = root/'steamrtarm64/steam'
     if not binary.is_file():
         raise RuntimeError('Steam installation has no native ARM64 executable')
+    ensure_dependencies()
     links(root)
     from steam_fex import register
     register(root)

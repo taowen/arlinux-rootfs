@@ -197,6 +197,8 @@ if missing:
     raise SystemExit('rootfs seed is missing required files: ' + ', '.join(missing))
 PY
     mkdir -p "$rootfs/usr/lib/arlinux/guest"
+    install -Dm644 runtime/tools/steam.py "$rootfs/usr/lib/arlinux/steam.py"
+    install -Dm755 runtime/tools/arlinux-steam "$rootfs/usr/bin/arlinux-steam"
     install -Dm755 "build/linux/runtime/$product/bwrap" "$rootfs/usr/local/bin/bwrap"
     cp tools/arlinux-app-data/hosted-ime.py tools/arlinux-app-data/org.arlinux.HostedInput.service \
       "$rootfs/usr/lib/arlinux/"

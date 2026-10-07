@@ -100,6 +100,33 @@ them; AHB is the portable accelerated host boundary. See
 and current limitations, and the [graphics protocol package](../graphics-protocols/README.md)
 for wire definitions.
 
+## Native Steam client
+
+`arlinux-steam` installs Valve's native ARM64 Steam client on first use and
+starts its normal desktop interface. Subsequent invocations start the existing
+client, including Steam's own updater. The client is downloaded on the phone,
+not redistributed in a rootfs bundle or APK. First use needs network access
+to the distribution package mirror and Valve's client CDN.
+
+Installation reads Valve's stable ARM64 KeyValues manifest,
+verifies the current native bootstrap's SHA-256 and stages it before writing
+client files. Valve's updater downloads and verifies the remaining components
+and owns its installation records. Downloads are cached under `$XDG_CACHE_HOME/arlinux/steam`;
+client files live under `$XDG_DATA_HOME/Steam` (normally `~/.local/share/Steam`).
+GTK2, PipeWire, libnm, lsof and normal X11/audio dependencies are installed
+using Debian's apt. Arch uses pacman for available dependencies but requires
+GTK2 to be installed separately; it is no longer in the main repositories.
+Unrelated Steam links are not overwritten.
+`arlinux-steam --update` refreshes the bootstrap and starts Valve's updater.
+The default is Valve's stable ARM64 channel. `--channel publicbeta` opts into
+the public beta; `--channel stable` returns to the stable client.
+
+The launcher directly runs `steamrtarm64/steam` and handles updater exit code
+42. It does not add sandbox/GPU arguments or provide x86 emulation, Proton,
+controller integration, or a claim of game compatibility. ARM64 channel
+discovery follows the approach demonstrated by
+[DroidDeck](https://github.com/Droid-Deck/DroidDeck/blob/main/tools/linuxfs/overlay/usr/local/bin/droiddeck-steam-install).
+
 ## Hosted Android applications
 
 The host installs `/usr/bin/arlinux-app`. `arlinux-app PACKAGE [HTTP_URL]`

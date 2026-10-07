@@ -57,12 +57,18 @@ own GitHub repository: [Debian](https://github.com/taowen/arlinux-debian/release
 asset, not GitHub's automatic source-code archive. The Android APK is released
 separately; a rootfs bundle is imported after installing it.
 
-## Create a distribution
+## Applications
+
+In a running ARM64 desktop, `arlinux-steam` downloads and starts Valve's native
+Steam client. It is not bundled; see [runtime tools](docs/RUNTIME-PROTOCOL.md#native-steam-client)
+for installation requirements and limits.
 
 To develop an Android app **inside** a running Debian/Yibu instance, start with
 the [Geany + Kotlin/Gradle project](examples/android-gradle/README.md), or the
 smaller [Java example](examples/android-dev/README.md). Both build natively on
 the ARM64 phone and run APKs through the host without system installation.
+
+## Create a distribution
 
 A distribution is an independent Git repository placed at
 `distributions/<id>`. It does not link against or import the private Android

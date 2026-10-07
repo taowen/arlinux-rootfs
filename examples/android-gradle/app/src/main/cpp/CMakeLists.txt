@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.22)
+project(pocketstudio LANGUAGES CXX)
+add_library(pocketnative SHARED native.cpp)
+target_compile_features(pocketnative PRIVATE cxx_std_17)
+target_compile_options(pocketnative PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(pocketnative PRIVATE log)

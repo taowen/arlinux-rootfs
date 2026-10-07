@@ -100,6 +100,29 @@ them; AHB is the portable accelerated host boundary. See
 and current limitations, and the [graphics protocol package](../graphics-protocols/README.md)
 for wire definitions.
 
+## Hosted Android applications
+
+The host installs `/usr/bin/arlinux-app`. `arlinux-app PACKAGE [HTTP_URL]`
+opens an installed Android application as a desktop window. The optional URL
+is delivered as an explicit `ACTION_VIEW` Intent. Mouse, keyboard and AT-SPI
+accessibility use the same hosted Activity session.
+
+`arlinux-app --apk PATH.apk` runs a standalone signed development APK without
+installing it in Android's system PackageManager. The wrapper resolves relative
+paths. The APK must be inside the active instance's rootfs or home directory;
+its package name must not collide with a system-installed application. Repeated
+launches close the previous test process, replace the code and preserve private
+test data. This does not emulate a full system installation or accept split
+APK sets. See the [phone-native Java/Geany example](../examples/android-dev/README.md).
+
+The launcher uses `$XDG_RUNTIME_DIR/hosted.sock`, a same-UID Unix stream owned
+by the host. Requests are UTF-8 lines, at most 8,450 bytes, with fields separated
+by a tab: `PACKAGE\tURL\n` or `@apk\tABSOLUTE_PATH\n`. Fields cannot contain
+tabs, carriage returns or newlines. The reply is `OK\n` or `ERR MESSAGE\n`.
+An APK's immutable snapshot, package registration and Activity process are
+owned by the Android runtime, not the distribution. Prefer the installed CLI
+over connecting to this endpoint directly.
+
 ## Hosted Android input method
 
 Android hosts the supported IME UI so touch and voice input continue to use the

@@ -1,0 +1,12 @@
+[project]
+name=Pocket Workbench
+base_path=.
+file_patterns=*.java;*.xml;*.sh;
+
+[build-menu]
+NF_00_LB=Build APK
+NF_00_CM=bash ./build.sh
+NF_00_WD=%p
+NF_02_LB=Build and run APK
+NF_02_CM=bash ./build.sh --run
+NF_02_WD=%p

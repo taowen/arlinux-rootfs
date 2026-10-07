@@ -59,6 +59,11 @@ separately; a rootfs bundle is imported after installing it.
 
 ## Create a distribution
 
+To develop an Android app **inside** a running Debian/Yibu instance, start with
+the [Geany + Kotlin/Gradle project](examples/android-gradle/README.md), or the
+smaller [Java example](examples/android-dev/README.md). Both build natively on
+the ARM64 phone and run APKs through the host without system installation.
+
 A distribution is an independent Git repository placed at
 `distributions/<id>`. It does not link against or import the private Android
 host. To start a repository alongside the built-in examples:
@@ -93,7 +98,7 @@ repository with the ZIP and its SHA-256 in the release notes.
   and AHB fit together, including current limitations.
 
 The [graphics protocol package](graphics-protocols/README.md) documents wire
-definitions for Xwayland, Mesa, libhybris, and compositor developers. The
+definitions for Xwayland, Mesa, libhybris, and compositor developers.
 The Android host uses [tawcroot](https://github.com/taowen/tawc/tree/main/tawcroot)
 for syscall compatibility; distribution libc packages remain unmodified.
 

@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:label="Pocket Studio" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:allowBackup="false">
+    <application android:label="Pocket Studio" android:theme="@android:style/Theme.Material.NoActionBar" android:allowBackup="false">
         <activity android:name=".ComposeActivity" android:exported="false" />
         <activity android:name=".NoteActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="true">

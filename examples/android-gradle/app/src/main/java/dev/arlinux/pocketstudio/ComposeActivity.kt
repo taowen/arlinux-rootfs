@@ -16,6 +16,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -29,7 +31,12 @@ class ComposeActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val preferences = getSharedPreferences("notes", MODE_PRIVATE)
         setContent {
-            MaterialTheme {
+            MaterialTheme(
+                colorScheme = darkColorScheme(
+                    primary = Color(0xFF3DDC97), onPrimary = Color(0xFF07130D),
+                    background = Color(0xFF0B0F19), surface = Color(0xFF111726), surfaceVariant = Color(0xFF232B40)
+                )
+            ) {
                 var note by rememberSaveable {
                     mutableStateOf(preferences.getString("compose_note", "") ?: "")
                 }

@@ -14,7 +14,15 @@ bash setup.sh
 geany studio.geany app/src/main/java/dev/arlinux/pocketstudio/MainActivity.kt
 ```
 
-Use **Build > Build and run APK**, or `bash run.sh`. To rebuild offline once
+Use **Build > Build and run APK**, or `bash run.sh`. The main screen shows an
+image computed by C++: change `kHue` at the top of `app/src/main/cpp/native.cpp`
+and build again to see recompiled native code recolor it.
+
+For a Geany look that reads well on a phone or in a recording (dark Pocket Dark
+scheme, 15 pt code font, no symbol sidebar), close Geany and run
+`bash geany-phone.sh` once. It only changes Geany's own settings.
+
+To rebuild offline once
 dependencies are cached, use `bash build.sh --offline`. A clean offline build is
 `bash build.sh clean --offline`. The standard signed APK is at
 `app/build/outputs/apk/debug/app-debug.apk`:

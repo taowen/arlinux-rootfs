@@ -2,6 +2,7 @@
 """Install Valve's native ARM64 client; launch it without graphics/sandbox overrides."""
 import argparse
 import ctypes.util
+import errno
 import fcntl
 import hashlib
 import json
@@ -242,7 +243,29 @@ def launch(root, arguments):
     while True:
         result = subprocess.run([str(binary), *arguments])
         if result.returncode != 42:  # Valve updater requests a client restart.
+            if result.returncode < 0:
+                print(f'Steam stopped with signal {-result.returncode}. '
+                      f'Client logs: {root / "logs"}', file=sys.stderr)
+                return 128 - result.returncode
             return result.returncode
+
+
+def require_robust_futex():
+    """Check the calling process, not an ADB process with a different seccomp policy."""
+    libc = ctypes.CDLL(None, use_errno=True)
+    libc.syscall.restype = ctypes.c_long
+    head, size = ctypes.c_void_p(), ctypes.c_size_t()
+    # ARM64 Linux get_robust_list; querying does not change pthread's registration.
+    result = libc.syscall(ctypes.c_long(100), ctypes.c_long(0),
+                          ctypes.byref(head), ctypes.byref(size))
+    if result < 0:
+        error = ctypes.get_errno()
+        reason = ('Android blocked the robust-futex system call in this app process'
+                  if error in (errno.ENOSYS, errno.EPERM) else os.strerror(error))
+        raise RuntimeError(f'{reason}. Steam requires it for inter-process locks. '
+                           'This needs an ARLinux runtime fix, not a Steam reinstall.')
+    if not head.value or size.value != 3 * ctypes.sizeof(ctypes.c_void_p):
+        raise RuntimeError('The runtime has no valid pthread robust-futex registration.')
 
 
 def main():
@@ -250,9 +273,12 @@ def main():
         raise RuntimeError('Native Steam requires ARM64 Linux')
     root = (Path(os.environ.get('XDG_DATA_HOME', Path.home()/'.local/share'))/'Steam').resolve()
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--desktop', action='store_true',
+                        help='Keep the launcher terminal open if startup fails')
     parser.add_argument('--update', action='store_true', help='Refresh the native bootstrap, then run Valve updater')
     parser.add_argument('--channel', choices=CHANNELS, help='Select a Valve ARM64 channel (default: stable)')
     args, steam_arguments = parser.parse_known_args()
+    require_robust_futex()
     cache = Path(os.environ.get('XDG_CACHE_HOME', Path.home()/'.cache'))/'arlinux/steam'
     cache.mkdir(parents=True, exist_ok=True)
     with (cache/'install.lock').open('w') as lock:
@@ -264,8 +290,14 @@ def main():
 
 if __name__ == '__main__':
     try:
-        sys.exit(main())
+        status = main()
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError,
             zipfile.BadZipFile, KeyError) as error:
         print(f'Steam: {error}', file=sys.stderr)
-        sys.exit(1)
+        status = 1
+    if status and '--desktop' in sys.argv and sys.stdin.isatty():
+        try:
+            input('\nSteam did not start. Press Enter to close this window. ')
+        except (EOFError, KeyboardInterrupt):
+            pass
+    sys.exit(status)

@@ -45,9 +45,9 @@ class Engine(IBus.Engine):
         return False
 
     def do_reset(self):
+        # Reset cancels composition; it is not a focus transition. GTK also
+        # resets on selection changes, which must not revoke the editor lease.
         self.set_preedit('')
-        if self.bridge.active is self:
-            self.bridge.focus(self)
 
     def do_disable(self):
         self.set_preedit('')

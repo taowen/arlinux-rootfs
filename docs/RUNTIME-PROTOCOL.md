@@ -201,11 +201,15 @@ edit must echo the current token and contain one operation:
 {"focus":"...", "operation":"key", "keyval":65289, "keycode":15, "state":0}
 ```
 
-The guest replies `{"accepted":true}` after applying an edit. A missing or stale
+The guest replies `{"accepted":true}` after submitting an edit to IBus, not after
+the application renders or persists it. A missing or stale
 focus token is rejected with
 `{"accepted":false,"reason":"focus-changed"}`. Focus tokens expire on every
 focus transition, including returning to the same input context. Senders must
 preserve order and must not retry a write whose delivery is uncertain.
+Composition reset clears preedit but does not change the focus token. Text needs
+a connected, focused IBus editor; the host must not substitute toolkit-specific
+Unicode keyboard shortcuts when that editor is unavailable.
 
 Surrounding-range deletion is unsupported. A `delete` request receives
 `{"accepted":false,"reason":"surrounding-range-deletion"}` without changing

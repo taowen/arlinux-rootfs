@@ -197,7 +197,6 @@ edit must echo the current token and contain one operation:
 {"focus":"...", "operation":"commit", "text":"text"}
 {"focus":"...", "operation":"preedit", "text":"composition"}
 {"focus":"...", "operation":"finish"}
-{"focus":"...", "operation":"delete", "before":1, "after":0}
 {"focus":"...", "operation":"enter"}
 {"focus":"...", "operation":"key", "keyval":65289, "keycode":15, "state":0}
 ```
@@ -207,6 +206,13 @@ focus token is rejected with
 `{"accepted":false,"reason":"focus-changed"}`. Focus tokens expire on every
 focus transition, including returning to the same input context. Senders must
 preserve order and must not retry a write whose delivery is uncertain.
+
+Surrounding-range deletion is unsupported. A `delete` request receives
+`{"accepted":false,"reason":"surrounding-range-deletion"}` without changing
+text or selection, and the connection remains usable. Backspace/Delete key
+events are different operations: the destination editor owns selection and
+grapheme handling. Never emulate a range by repeating those keys. Native hosted
+Android editors retain their own InputConnection deletion semantics.
 
 ## Audio
 

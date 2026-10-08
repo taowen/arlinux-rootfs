@@ -75,13 +75,9 @@ class Engine(IBus.Engine):
                 raise ValueError('invalid key event')
             self.forward_key_event(*values)
         elif operation == 'delete':
-            counts = [message[name] for name in ('before', 'after')]
-            if any(type(count) is not int or not 0 <= count <= 1024 for count in counts):
-                raise ValueError('invalid deletion length')
-            for count, keyval, keycode in ((counts[0], IBus.KEY_BackSpace, 14),
-                                          (counts[1], IBus.KEY_Delete, 111)):
-                for _ in range(count):
-                    self.tap(keyval, keycode)
+            # A Backspace key deletes selections/graphemes, not a surrounding
+            # range. No synchronized destination snapshot is available here.
+            raise NotImplementedError('surrounding-range-deletion')
         elif operation == 'enter':
             self.edit({'operation': 'finish'})
             self.tap(IBus.KEY_Return, 28)
@@ -129,7 +125,11 @@ class Client:
                 if not self.bridge.active or message.get('focus') != self.bridge.token:
                     self.send({'accepted': False, 'reason': 'focus-changed'})
                     continue
-                self.bridge.active.edit(message)
+                try:
+                    self.bridge.active.edit(message)
+                except NotImplementedError as error:
+                    self.send({'accepted': False, 'reason': str(error)})
+                    continue
                 self.send({'accepted': True})
             return self.channel.fileno() >= 0
         except (OSError, ValueError, KeyError, TypeError):

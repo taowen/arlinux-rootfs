@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Steam
+Comment=Install Steam on first launch, then open the client
+Comment[zh_CN]=首次启动自动安装 Steam，之后打开客户端
+Exec=arlinux-steam
+Icon=/usr/share/pixmaps/arlinux-steam.png
+Terminal=true
+Categories=Game;
+Keywords=Games;Gaming;
+StartupNotify=false

@@ -200,6 +200,8 @@ PY
     install -Dm644 runtime/tools/steam.py "$rootfs/usr/lib/arlinux/steam.py"
     install -Dm644 runtime/tools/steam_fex.py "$rootfs/usr/lib/arlinux/steam_fex.py"
     install -Dm755 runtime/tools/arlinux-steam "$rootfs/usr/bin/arlinux-steam"
+    install -Dm644 runtime/tools/arlinux-steam.desktop "$rootfs/usr/share/applications/arlinux-steam.desktop"
+    install -Dm644 runtime/tools/steam.png "$rootfs/usr/share/pixmaps/arlinux-steam.png"
     install -Dm755 "build/linux/runtime/$product/bwrap" "$rootfs/usr/local/bin/bwrap"
     cp tools/arlinux-app-data/hosted-ime.py tools/arlinux-app-data/org.arlinux.HostedInput.service \
       "$rootfs/usr/lib/arlinux/"

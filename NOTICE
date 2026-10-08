@@ -1,3 +1,10 @@
 Arlinux rootfs pins third-party sources as Git submodules. Those projects keep
 their upstream copyright notices and licenses; generated bundles must preserve
 the notices required by the components they contain.
+
+runtime/tools/steam.png is the unmodified 256x256 Steam launcher icon from
+Valve's official package: https://cdn.fastly.steamstatic.com/client/installer/steam.deb
+Copyright Valve Corporation. Steam and the Steam logo are Valve trademarks.
+The icon identifies the optional Steam installer; Steam itself is not bundled.
+Valve's package identifies its license as the Steam Subscriber Agreement:
+https://store.steampowered.com/subscriber_agreement/

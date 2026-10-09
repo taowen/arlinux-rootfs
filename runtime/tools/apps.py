@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 """Linux and hosted Android desktop entries in one searchable app drawer."""
+import os
+
+# Select the native display before PyGObject initializes GDK.
+os.environ["GDK_BACKEND"] = "wayland"
 import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")

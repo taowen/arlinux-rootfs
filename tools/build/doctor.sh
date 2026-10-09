@@ -4,7 +4,7 @@ set -euo pipefail
 required=(
   aarch64-linux-gnu-gcc aarch64-linux-gnu-g++ aarch64-linux-gnu-pkg-config
   autoconf automake bsdtar curl debootstrap file git glslangValidator jq libtoolize
-  make meson ninja patchelf python3 readelf sha256sum tar wayland-scanner zstd
+  dpkg-deb make meson ninja patchelf python3 readelf sha256sum tar wayland-scanner zstd
 )
 missing=()
 for program in "${required[@]}"; do
@@ -18,7 +18,7 @@ if [[ ${#missing[@]} -ne 0 ]]; then
 fi
 
 [[ "$(uname -s)" == Linux ]] || { echo 'The rootfs build requires Linux.' >&2; exit 2; }
-libraries=(egl gl glesv2 wayland-client wayland-egl wayland-server x11 x11-xcb xcb)
+libraries=(egl gl glesv2 libglvnd wayland-client wayland-egl wayland-server x11 x11-xcb xcb)
 missing=()
 for library in "${libraries[@]}"; do
   aarch64-linux-gnu-pkg-config --exists "$library" || missing+=("$library")

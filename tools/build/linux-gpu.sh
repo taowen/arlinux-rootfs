@@ -7,11 +7,13 @@ cache_root="${ARLINUX_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/arlinux}"
 mesa_install="$repo/build/linux/mesa"
 hybris_stage="$repo/build/linux/libhybris"
 mesa_revision="$(git -C "$repo/third_party/mesa" rev-parse HEAD)"
-mesa_cache="$cache_root/mesa-$mesa_revision"
+mesa_changes="$(git -C "$repo/third_party/mesa" diff --binary HEAD | sha256sum | cut -c1-16)"
+mesa_cache="$cache_root/mesa-$mesa_revision-$mesa_changes"
 mesa_source="$mesa_cache/source"
 mesa_build="$mesa_cache/build"
 gpu_id="$({
     printf '%s\n' "$mesa_revision"
+    printf '%s\n' "$mesa_changes"
     git -C "$repo/third_party/libhybris" rev-parse HEAD
     git -C "$repo/third_party/android-headers" rev-parse HEAD
     (cd "$repo" && {
@@ -23,7 +25,7 @@ gpu_id_file="$repo/build/linux/gpu.inputs.sha256"
 
 if [[ -f "$mesa_install/lib/libvulkan_freedreno.so" \
       && -f "$hybris_stage/install/usr/lib/hybris/libVkLayer_hybris_compat.so" ]]; then
-    if [[ ! -f "$gpu_id_file" || "$(cat "$gpu_id_file")" == "$gpu_id" ]]; then
+    if [[ -f "$gpu_id_file" && "$(cat "$gpu_id_file")" == "$gpu_id" ]]; then
         mkdir -p "$(dirname "$gpu_id_file")"
         printf '%s\n' "$gpu_id" > "$gpu_id_file"
         printf '%s\n' "$mesa_install" "$hybris_stage/install/usr/lib/hybris"
@@ -36,6 +38,7 @@ build_mesa() {
         rm -rf "$mesa_cache"
         mkdir -p "$mesa_source"
         git -C "$repo/third_party/mesa" archive "$mesa_revision" | tar -xf - -C "$mesa_source"
+        git -C "$repo/third_party/mesa" diff --binary HEAD | git -C "$mesa_source" apply --allow-empty
     fi
     mkdir -p "$mesa_build" "$mesa_install"
     local setup=(meson setup "$mesa_build" "$mesa_source"
@@ -46,14 +49,20 @@ build_mesa() {
         -Dvulkan-drivers=freedreno -Dfreedreno-kmds=kgsl
         -Dplatforms=x11,wayland -Darlinux-wsi=true
         -Degl-native-platform=auto -Degl=enabled -Dgles1=disabled
-        -Dgles2=enabled -Dopengl=true -Dglx=dri -Dgbm=disabled
+        -Dgles2=enabled -Dopengl=true -Dglx=dri -Dgbm=enabled -Dglvnd=enabled
+        -Dgbm-backends-path=/usr/lib/mesa/gbm
         -Dllvm=disabled -Dzstd=disabled -Dshader-cache=false
         -Dxmlconfig=enabled -Dexpat=enabled -Dzlib=enabled
         -Dbuild-tests=false -Dtools= -Dvideo-codecs=)
     [[ -f "$mesa_build/build.ninja" ]] && setup+=(--reconfigure --clearcache)
     PKG_CONFIG_PATH="$repo/graphics-protocols" "${setup[@]}"
-    ninja -C "$mesa_build" -j"$jobs" install
+    ninja -C "$mesa_build" -j"$jobs"
+    rm -rf -- "$mesa_install"
+    ninja -C "$mesa_build" install
     cp -L /usr/lib/aarch64-linux-gnu/libvulkan.so.1 "$mesa_install/lib/libvulkan.so.1"
+    for library in libGL.so.1 libEGL.so.1 libGLESv2.so.2 libGLX.so.0 libOpenGL.so.0 libGLdispatch.so.0; do
+        cp -L "/usr/lib/aarch64-linux-gnu/$library" "$mesa_install/lib/$library"
+    done
 }
 
 build_hybris() {

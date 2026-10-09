@@ -13,6 +13,7 @@ if [[ ${#products[@]} -eq 0 ]]; then
         -name product.json -printf '%h\n' | sed 's|.*/||' | sort)
 fi
 gpu_inputs="$(git submodule status third_party/mesa third_party/libhybris third_party/android-headers)"
+gpu_inputs+="$(git -C third_party/mesa diff --binary HEAD | sha256sum)"
 
 ./tools/build/doctor.sh --quiet
 
@@ -113,6 +114,7 @@ echo '== Linux GPU stack =='
 "$repo/tools/build/linux-gpu.sh"
 mesa="$repo/build/linux/mesa/lib"
 hybris="$repo/build/linux/libhybris/install/usr/lib/hybris"
+python3 "$repo/tools/build/mesa-debs.py"
 
 # Every GPU library finds its neighbours relative to its own location. The
 # exact Android app-private directory is supplied only when the guest runs.
@@ -159,6 +161,10 @@ PY
     install -Dm644 tools/arlinux-app-data/org.arlinux.HostedInput.service \
       "$rootfs/usr/share/dbus-1/services/org.arlinux.HostedInput.service"
     cp -a "$product_dir/guest/." "$rootfs/usr/lib/arlinux/guest/"
+    if [[ "$product" == yibu || "$product" == debian ]]; then
+        mkdir -p "$rootfs/usr/lib/arlinux/mesa-packages"
+        cp build/linux/mesa-debs/*.deb "$rootfs/usr/lib/arlinux/mesa-packages/"
+    fi
     cp examples/desk-auto/dump-atspi.py examples/desk-auto/atspi-do.py \
       "$rootfs/usr/lib/arlinux/guest/"
     chmod 755 "$rootfs/usr/lib/arlinux/guest/"*.py \
@@ -207,16 +213,18 @@ PY
     sha256sum "$assets/rootfs.tar.zst" | cut -d' ' -f1 > "$assets/rootfs-seed-id"
 
     overlay="$stage/$product/gpu"
-    mkdir -p "$overlay/usr/lib/mesa/dri" \
-      "$overlay/usr/lib/arlinux/vulkan" "$overlay/usr/share/vulkan/icd.d"
+    mkdir -p "$overlay/usr/lib/mesa/dri" "$overlay/usr/lib/mesa/gbm" \
+      "$overlay/usr/lib/arlinux/vulkan" "$overlay/usr/share/vulkan/icd.d" \
+      "$overlay/usr/share/glvnd/egl_vendor.d"
     cp -a "$mesa"/libEGL.so* "$mesa"/libGLESv2.so* "$mesa"/libGL.so* "$mesa"/libgallium-*.so \
       "$mesa/libvulkan_freedreno.so" "$mesa/libvulkan.so.1" "$overlay/usr/lib/mesa/"
+    cp -a "$mesa"/libEGL_mesa.so* "$mesa"/libGLX_mesa.so* "$mesa"/libgbm.so* \
+      "$mesa/libGLX.so.0" "$mesa/libGLdispatch.so.0" "$mesa/libOpenGL.so.0" "$overlay/usr/lib/mesa/"
+    cp -a "$mesa/gbm/dri_gbm.so" "$overlay/usr/lib/mesa/gbm/"
+    cp "$mesa/../share/glvnd/egl_vendor.d/50_mesa.json" "$overlay/usr/share/glvnd/egl_vendor.d/"
     cp -a "$mesa/dri/libdril_dri.so" "$overlay/usr/lib/mesa/dri/"
     ln -sfn libdril_dri.so "$overlay/usr/lib/mesa/dri/zink_dri.so"
     ln -sfn libdril_dri.so "$overlay/usr/lib/mesa/dri/swrast_dri.so"
-    for link in libGLX.so.0 libGLX.so.1 libGLX.so.0.0.0 libGLX.so libGLX_mesa.so.0 libOpenGL.so.0 libOpenGL.so; do
-      ln -sfn libGL.so.1.2.0 "$overlay/usr/lib/mesa/$link"
-    done
     cp "$hybris/libVkLayer_hybris_compat.so" "$hybris/VkLayer_hybris_compat.json" "$overlay/usr/lib/arlinux/vulkan/"
     api="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["ICD"]["api_version"])' "$mesa/../share/vulkan/icd.d/freedreno_icd.aarch64.json")"
     python3 - "$overlay/usr/share/vulkan/icd.d/freedreno_icd.json" "$api" <<'PY'

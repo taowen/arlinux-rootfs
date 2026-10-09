@@ -22,6 +22,13 @@ OpenGL and OpenGL ES use Mesa Zink, which translates GL commands to Vulkan and
 therefore uses the same selected driver. Both Turnip and libhybris execute in
 the application process, or in an application-owned GPU worker process.
 
+Debian and Yibu use Debian's standard GLVND dispatch libraries with ARLinux's
+Mesa EGL, GLX, DRI and GBM provider packages. These packages share one Zink-only
+Gallium build, without LLVM or unrelated desktop GPU drivers. APT sees real
+provider packages and their dependencies, so installing applications does not
+require a second copy of Debian's Mesa stack. Providing the GBM library does
+not create an Android DRM render device or add DMA-BUF presentation support.
+
 The runtime supplies the driver search paths and GPU environment to the entire
 session. Driver availability does not, by itself, guarantee accelerated window
 presentation: an application must also support an available presentation path.

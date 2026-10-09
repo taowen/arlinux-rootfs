@@ -29,7 +29,7 @@ sudo apt install \
   curl debootstrap file g++-aarch64-linux-gnu gcc-aarch64-linux-gnu git \
   glslang-tools jq libarchive-tools libtool meson ninja-build patchelf pkgconf:arm64 python3 tar \
   wayland-protocols zstd \
-  libegl-dev:arm64 libgl-dev:arm64 libgles-dev:arm64 libwayland-dev:arm64 \
+  libegl-dev:arm64 libgl-dev:arm64 libgles-dev:arm64 libglvnd-dev:arm64 libwayland-dev:arm64 \
   libx11-dev:arm64 libx11-xcb-dev:arm64 libxcb1-dev:arm64
 ```
 

@@ -77,6 +77,7 @@ def seal(seed: Path, snapshot: Path, output: Path) -> None:
                 'var/run', 'var/lock', 'usr/lib/mesa/', 'usr/lib/hybris/')
     allowed = {'etc', 'usr', 'opt', 'var', 'bin', 'sbin', 'lib', 'lib64'}
     seen = set()
+    mesa_packages = set()
     with tempfile.TemporaryDirectory(prefix='arlinux-seal-') as temp:
         compressed = Path(temp) / 'rootfs.tar.zst'
         with compressed.open('wb') as dest:
@@ -107,6 +108,15 @@ def seal(seed: Path, snapshot: Path, output: Path) -> None:
                         elif name == 'usr/lib/arlinux/guest/first-boot.sh':
                             body = io.BytesIO(final_first_boot)
                             member.size = len(final_first_boot)
+                        elif name == 'var/lib/dpkg/status':
+                            data = body.read()
+                            for block in data.decode().split('\n\n'):
+                                fields = dict(line.split(': ', 1) for line in block.splitlines()
+                                              if ': ' in line and not line.startswith(' '))
+                                if (fields.get('Status') == 'install ok installed'
+                                        and '+arlinux.' in fields.get('Version', '')):
+                                    mesa_packages.add(fields.get('Package'))
+                            body = io.BytesIO(data)
                         elif name == 'usr/share/arlinux/offline-desktop':
                             if body.read() != b'1\n':
                                 raise ValueError('Device preparation did not finish')
@@ -128,6 +138,10 @@ def seal(seed: Path, snapshot: Path, output: Path) -> None:
                     'usr/bin/arlinux-opencode', 'usr/bin/thunar', 'usr/bin/mousepad'}
         if not required <= seen:
             raise ValueError('Incomplete device desktop: ' + ', '.join(sorted(required - seen)))
+        providers = {'mesa-libgallium', 'libgbm1', 'libgl1-mesa-dri', 'libglx-mesa0', 'libegl-mesa0'}
+        if not providers <= mesa_packages:
+            raise ValueError('Device desktop is missing ARLinux Mesa provider packages: ' +
+                             ', '.join(sorted(providers - mesa_packages)))
         with compressed.open('rb') as stream:
             digest = hashlib.file_digest(stream, 'sha256').hexdigest()
         rewrite(seed, output, {'rootfs.tar.zst': compressed,

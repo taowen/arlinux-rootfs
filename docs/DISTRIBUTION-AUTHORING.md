@@ -61,6 +61,17 @@ The preparation ZIP explicitly invokes Debian's `guest/build-desktop.sh`.
 The final ZIP restores the local-only `guest/first-boot.sh`. Sealing removes
 device identities, host launchers, selected GPU overlays, logs and caches; the
 bundle retains both GPU overlays for selection on the destination phone.
+Offline desktop sealing retains English and Chinese translations, removes man
+pages and non-legal package documentation, and preserves copyright, license
+and attribution notices. It also omits Noto Serif CJK Regular and Bold, retaining
+Noto Sans CJK and DejaVu. Users can restore the CJK serif fonts with
+`sudo apt update && sudo apt install --reinstall fonts-noto-cjk`;
+no persistent font exclusion is set.
+Apply the same policy to an existing offline ZIP with
+`python3 tools/device-desktop.py compact out/yibu.zip out/yibu-compact.zip`;
+this recompresses the rootfs and regenerates its checksums without downloading
+or reinstalling packages. Other fonts, runtime libraries and application data
+in the image are not changed by compaction.
 Never use a personal instance or export its home directory. Keep network
 downloads in preparation; `guest/first-boot.sh` only writes device-local
 configuration. Do not bake in an Android package name, UID or instance directory.

@@ -13,12 +13,73 @@ import hashlib
 import io
 import json
 from pathlib import Path
+import posixpath
+import shutil
 import subprocess
 import tarfile
 import tempfile
 import zipfile
 
 from bundle import verify
+
+
+def omit_desktop_resource(name: str, directory: bool = False, symlink: str | None = None) -> bool:
+    """Trim optional resources while keeping CJK Sans, translations and legal notices."""
+    name = name.removeprefix('./').rstrip('/')
+    optional_fonts = {
+        'usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc',
+        'usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc',
+    }
+    if name in optional_fonts:
+        return True
+    if symlink:
+        target = (symlink.lstrip('/') if symlink.startswith('/') else
+                  posixpath.normpath(posixpath.join(posixpath.dirname(name), symlink)))
+        if (target in optional_fonts or target.startswith(('usr/share/man/', 'usr/share/locale/'))) and omit_desktop_resource(target):
+            return True
+    parts = name.split('/')
+    if parts[:3] == ['usr', 'share', 'locale'] and len(parts) > 3:
+        language = parts[3].split('_', 1)[0].split('@', 1)[0].split('.', 1)[0]
+        return language not in {'en', 'zh', 'C', 'POSIX'} and parts[3] != 'locale.alias'
+    if parts[:3] == ['usr', 'share', 'man']:
+        return True
+    if parts[:3] == ['usr', 'share', 'doc'] and len(parts) > 4 and not directory:
+        notices = ('copyright', 'license', 'licence', 'copying', 'notice', 'authors', 'legal', 'credits')
+        return not any(part.lower().startswith(notices) for part in parts[4:])
+    return False
+
+
+def compact(bundle: Path, output: Path) -> None:
+    """Apply the sealing policy to an already prepared offline desktop without reinstalling it."""
+    with tempfile.TemporaryDirectory(prefix='arlinux-compact-') as temp:
+        original = Path(temp) / 'original.zst'
+        compressed = Path(temp) / 'rootfs.tar.zst'
+        with zipfile.ZipFile(bundle) as archive:
+            if 'offline-desktop' not in archive.namelist():
+                raise ValueError('Expected a prepared offline desktop')
+            with archive.open('rootfs.tar.zst') as source, original.open('wb') as target:
+                shutil.copyfileobj(source, target)
+        with original.open('rb') as source, compressed.open('wb') as dest:
+            reader = subprocess.Popen(['zstd', '-dc'], stdin=source, stdout=subprocess.PIPE)
+            writer = subprocess.Popen(['zstd', '-T4', '-19', '-c'], stdin=subprocess.PIPE, stdout=dest)
+            try:
+                with tarfile.open(fileobj=reader.stdout, mode='r|') as archive, tarfile.open(fileobj=writer.stdin, mode='w|') as target:
+                    for member in archive:
+                        if omit_desktop_resource(member.name, member.isdir(), member.linkname if member.issym() else None):
+                            continue
+                        target.addfile(member, archive.extractfile(member) if member.isfile() else None)
+                writer.stdin.close()
+                if reader.wait() or writer.wait():
+                    raise RuntimeError('rootfs compaction failed')
+            finally:
+                for process in (reader, writer):
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+        with compressed.open('rb') as stream:
+            digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+        rewrite(bundle, output, {'rootfs.tar.zst': compressed, 'rootfs-seed-id': (digest + '\n').encode()})
+        print(f'Rootfs: {original.stat().st_size / 2**20:.2f} -> {compressed.stat().st_size / 2**20:.2f} MiB')
 
 
 def rewrite(seed: Path, output: Path, replacements: dict[str, bytes | Path]) -> None:
@@ -92,6 +153,8 @@ def seal(seed: Path, snapshot: Path, output: Path) -> None:
                             raise ValueError('OpenCode must be installed on demand, not exported in the offline desktop')
                         if name.split('/')[0] not in allowed or name in dropped or name.startswith(prefixes):
                             continue
+                        if omit_desktop_resource(name, member.isdir(), member.linkname if member.issym() else None):
+                            continue
                         if not (member.isfile() or member.isdir() or member.issym() or member.islnk()):
                             continue
                         if member.issym() and member.linkname.startswith(('/data/', '/sdcard/')):
@@ -159,8 +222,13 @@ if __name__ == '__main__':
     sealing.add_argument('seed', type=Path)
     sealing.add_argument('snapshot', type=Path)
     sealing.add_argument('output', type=Path)
+    compaction = sub.add_parser('compact')
+    compaction.add_argument('bundle', type=Path)
+    compaction.add_argument('output', type=Path)
     args = parser.parse_args()
     if args.command == 'prepare':
         prepare(args.seed, args.output)
-    else:
+    elif args.command == 'seal':
         seal(args.seed, args.snapshot, args.output)
+    else:
+        compact(args.bundle, args.output)

@@ -147,6 +147,8 @@ if missing:
     raise SystemExit('rootfs seed is missing required files: ' + ', '.join(missing))
 PY
     mkdir -p "$rootfs/usr/lib/arlinux/guest"
+    install -Dm644 runtime/tools/apps.py "$rootfs/usr/lib/arlinux/guest/yibu-launcher.py"
+    install -Dm644 runtime/tools/arlinux-apps.desktop "$rootfs/usr/share/applications/arlinux-apps.desktop"
     install -Dm644 runtime/tools/steam.py "$rootfs/usr/lib/arlinux/steam.py"
     install -Dm644 runtime/tools/steam_fex.py "$rootfs/usr/lib/arlinux/steam_fex.py"
     install -Dm755 runtime/tools/arlinux-steam "$rootfs/usr/bin/arlinux-steam"
@@ -195,6 +197,7 @@ PY
         cp "$rootfs/usr/share/arlinux/offline-desktop" "$assets/offline-desktop"
     fi
     cp -a "$product_dir/guest" "$assets/guest"
+    install -Dm644 runtime/tools/apps.py "$assets/guest/yibu-launcher.py"
     cp examples/desk-auto/dump-atspi.py examples/desk-auto/atspi-do.py "$assets/guest/"
     chmod 755 "$assets/guest/"*.py "$assets/guest/"*.sh
     [[ ! -f "$assets/guest/arlinux-a11y" ]] ||

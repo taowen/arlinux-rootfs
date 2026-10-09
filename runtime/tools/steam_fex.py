@@ -1,9 +1,10 @@
-"""Steam compatibility tool for native x86-64 Linux games on ARM64.
+"""Prepare graphics libraries for Valve's official FEX compatibility tool.
 
-Uses Valve's FEX and sniper depots, without pressure-vessel's unavailable
-user namespaces. Guest libraries remain in a private cache, never /usr/lib.
+Steam owns compatibility selection and game startup. This module supplies
+a private graphics provider; it never launches games or modifies Valve files.
 """
 import fcntl
+import filecmp
 import gzip
 import json
 import os
@@ -11,40 +12,11 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 
 
-def register(steam):
-    tool = steam/'compatibilitytools.d/arlinux-fex'
-    tool.mkdir(parents=True, exist_ok=True)
-    files = {
-        'compatibilitytool.vdf': '''"compatibilitytools" { "compat_tools" {
- "arlinux-fex" { "install_path" "." "display_name" "ARLinux Linux x86-64 (FEX)"
- "from_oslist" "linux" "to_oslist" "linux" }
-} }
-''',
-        'toolmanifest.vdf': '''"manifest" { "version" "2"
- "commandline" "/run %verb%" "use_tool_subprocess_reaper" "1" }
-''',
-        'run': '#!/bin/sh\nexec python3 /usr/lib/arlinux/steam_fex.py "$@"\n',
-    }
-    for name, content in files.items():
-        path = tool/name
-        if not path.exists() or path.read_text() != content:
-            path.write_text(content)
-        path.chmod(0o755 if name == 'run' else 0o644)
-
-
-def configure(steam):
-    """Select the Linux/FEX runtime before Steam reads its configuration.
-
-    Native game metadata has priority 90, overriding the usual default 75.
-    A user-priority default avoids Android's unavailable pressure-vessel
-    namespaces. Explicit per-game choices remain untouched. Never replace
-    Valve executables or change a running client's configuration.
-    """
-    register(steam)
+def remove_old_tool(steam):
+    """Remove only our former tool and its selections, while Steam is stopped."""
     pidfile = Path.home()/'.steam/steam.pid'
     if pidfile.is_file():
         try:
@@ -62,30 +34,70 @@ def configure(steam):
     data = keyvalues(path.read_text()) if path.exists() else {}
     node = data
     for name in ('InstallConfigStore', 'Software', 'Valve', 'Steam', 'CompatToolMapping'):
-        node = node.setdefault(name, {})
-    current = node.get('0')
-    if current and current.get('name') != 'arlinux-fex':
-        return  # Preserve a user-selected default compatibility tool.
-    setting = {'name': 'arlinux-fex', 'config': '', 'priority': '250'}
-    if current == setting:
+        node = node.get(name, {})
+    removed = [key for key, value in node.items()
+               if isinstance(value, dict) and value.get('name') == 'arlinux-fex']
+    if removed:
+        for key in removed:
+            del node[key]
+        def dump(block, indent=0):
+            lines = []
+            for key, value in block.items():
+                prefix = '\t'*indent + json.dumps(key, ensure_ascii=False)
+                if isinstance(value, dict):
+                    lines += [prefix, '\t'*indent+'{', dump(value, indent+1), '\t'*indent+'}']
+                else:
+                    lines.append(prefix+'\t'+json.dumps(value, ensure_ascii=False))
+            return '\n'.join(lines)
+        backup = path.with_suffix('.before-official-fex')
+        if not backup.exists():
+            shutil.copy2(path, backup)
+        temporary = path.with_suffix('.arlinux-tmp')
+        temporary.write_text(dump(data)+'\n')
+        temporary.replace(path)
+    tool = steam/'compatibilitytools.d/arlinux-fex'
+    # Preserve unexpected/user-added content instead of recursively deleting it.
+    script = tool/'run'
+    if script.is_file() and '/usr/lib/arlinux/steam_fex.py' in script.read_text():
+        for name in ('run', 'toolmanifest.vdf', 'compatibilitytool.vdf'):
+            (tool/name).unlink(missing_ok=True)
+        if not any(tool.iterdir()):
+            tool.rmdir()
+
+
+def configure(steam):
+    remove_old_tool(steam)
+    os.environ.setdefault('PRESSURE_VESSEL_BWRAP', '/usr/local/bin/bwrap')
+    try:
+        fex, root = prepare(steam)
+    except IncompleteRuntime as error:
+        print(f'Steam runtime: {error}. Restart Steam after the download completes.', flush=True)
         return
-    node['0'] = setting
-    def dump(block, indent=0):
-        lines = []
-        for key, value in block.items():
-            prefix = '\t'*indent + json.dumps(key, ensure_ascii=False)
-            if isinstance(value, dict):
-                lines += [prefix, '\t'*indent+'{', dump(value, indent+1), '\t'*indent+'}']
-            else:
-                lines.append(prefix+'\t'+json.dumps(value, ensure_ascii=False))
-        return '\n'.join(lines)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    backup = path.with_suffix('.arlinux-backup')
-    if path.is_file() and not backup.exists():
-        shutil.copy2(path, backup)
-    temporary = path.with_suffix('.arlinux-tmp')
-    temporary.write_text(dump(data)+'\n')
-    temporary.replace(path)
+    os.environ.setdefault('STEAM_COMPAT_GRAPHICS_PROVIDER', str(root/'graphics_provider.json'))
+    os.environ.setdefault('STEAM_COMPAT_FEX_CONFIG',
+                          'TSOEnabled:1,Multiblock:1,ThunksDB_GL:1,ThunksDB_Vulkan:1')
+    os.environ.setdefault('FEX_ROOTFS', str(root))
+    libs = root/'usr/lib/x86_64-linux-gnu'
+    os.environ.setdefault('FEX_ENV', 'LD_LIBRARY_PATH='
+                          + os.environ.get('LD_LIBRARY_PATH', '') + ':'
+                          + str(libs) + ':' + str(libs/'pulseaudio'))
+    # Export auxiliary dlopen resources as well as the ELF dependencies.
+    # Resolve the app-owned root alias once, before entering Valve's path view.
+    files = os.environ.get('BIONICX_FILES')
+    if files:
+        native = (Path(files)/'rootfs').resolve(strict=True)
+        hybris = native/'usr/lib/hybris'
+        directories = [native/'usr/lib/mesa', hybris,
+                       *map(Path, ('/system', '/system_ext', '/product', '/vendor', '/odm', '/apex'))]
+        mounts = os.environ.get('STEAM_COMPAT_MOUNTS', '').split(':')
+        mounts += [str(p) for p in directories if p.is_dir()]
+        os.environ['STEAM_COMPAT_MOUNTS'] = ':'.join(dict.fromkeys(p for p in mounts if p))
+        if hybris.is_dir():
+            os.environ.setdefault('HYBRIS_LINKER_DIR', str(hybris/'libhybris/linker'))
+
+
+class IncompleteRuntime(RuntimeError):
+    pass
 
 
 def app_directory(steam, appid):
@@ -105,7 +117,7 @@ def app_directory(steam, appid):
                 if directory.is_dir():
                     return directory
     name = {'3127680': 'FEX-Emu', '1628350': 'Steam Linux Runtime 3.0 (sniper)'}.get(appid, appid)
-    raise RuntimeError(f'Install {name} through Steam first: steam://install/{appid}')
+    raise IncompleteRuntime(f'Install {name} through Steam first: steam://install/{appid}')
 
 
 def base_packages(cache):
@@ -213,7 +225,7 @@ def prepare(steam):
     sniper = app_directory(steam, '1628350')
     platforms = [p for p in sniper.glob('sniper_platform_*') if (p/'usr-mtree.txt.gz').is_file()]
     if not platforms:
-        raise RuntimeError('Steam Linux Runtime 3.0 (sniper) is incomplete; verify its files in Steam')
+        raise IncompleteRuntime('Steam Linux Runtime 3.0 (sniper) is incomplete; verify its files in Steam')
     platform = max(platforms, key=lambda p: tuple(map(int, re.findall(r'\d+', p.name))))
     cache = Path(os.environ.get('XDG_CACHE_HOME', Path.home()/'.cache'))/'arlinux/steam-fex'
     cache.mkdir(parents=True, exist_ok=True)
@@ -228,62 +240,28 @@ def prepare(steam):
                 shutil.rmtree(stage)
             materialize(platform, stage)
             install_base(packages, stage)
-            # FEX's current openat2 path cannot run in an Android app. Expose
-            # guest libraries with absolute names in FEX_ENV instead. Thunks
-            # need matching paths too; only this private x86 runtime is changed.
-            for name, thunk in [('libGL.so.1', 'libGL-guest.so'),
-                                ('libvulkan.so.1', 'libvulkan-guest.so')]:
-                path = stage/'usr/lib/x86_64-linux-gnu'/name
-                path.unlink(missing_ok=True)
-                path.symlink_to(fex/'usr/share/fex-emu/GuestThunks'/thunk)
             (stage/'complete').touch()
             stage.rename(root)
-        config = root/'app-config.json'
-        content = json.dumps({'Config': {'TSOEnabled': '1'},
-                              'ThunksDB': {'GL': 1, 'Vulkan': 1}})
-        if not config.exists() or config.read_text() != content:
-            temporary = config.with_suffix('.tmp')
+        # pressure-vessel rejects provider links outside the provider root.
+        # Copy Valve's thunks into our cache, refreshing them after FEX updates.
+        # Neither the FEX depot nor the Steam runtime depot is modified.
+        for name, thunk in [('libGL.so.1', 'libGL-guest.so'),
+                            ('libvulkan.so.1', 'libvulkan-guest.so')]:
+            source = fex/'usr/share/fex-emu/GuestThunks'/thunk
+            target = root/'usr/lib/x86_64-linux-gnu'/name
+            if target.is_symlink() or not target.is_file() or not filecmp.cmp(source, target, shallow=False):
+                temporary = target.with_suffix(target.suffix + '.tmp')
+                shutil.copy2(source, temporary)
+                temporary.replace(target)
+        provider = {'graphics_provider_v0': {
+            'root': './', 'locales': False, 'va_api': False, 'vdpau': False,
+            'architectures': {'x86_64-linux-gnu': {
+                'fallback_library_paths': ['/usr/lib/x86_64-linux-gnu'],
+                'gconv': '/usr/lib/x86_64-linux-gnu/gconv'}}}}
+        descriptor = root/'graphics_provider.json'
+        content = json.dumps(provider)+'\n'
+        if not descriptor.exists() or descriptor.read_text() != content:
+            temporary = descriptor.with_suffix('.tmp')
             temporary.write_text(content)
-            temporary.replace(config)
+            temporary.replace(descriptor)
     return fex, root
-
-
-def launch(verb, command):
-    if verb in ('getcompatpath', 'getnativepath'):
-        if not command:
-            raise ValueError('Missing path')
-        print(command[0])
-        return 0
-    if verb not in ('run', 'waitforexitandrun'):
-        return 0
-    if command and command[0] == '--':
-        command = command[1:]
-    if not command:
-        raise ValueError('Missing game command')
-    steam = (Path(os.environ.get('XDG_DATA_HOME', Path.home()/'.local/share'))/'Steam').resolve()
-    # Preparation also spawns native APT/dpkg processes, which must not
-    # inherit Steam's foreign-architecture overlay.
-    os.environ.pop('LD_PRELOAD', None)
-    fex, root = prepare(steam)
-    env = os.environ.copy()
-    # Steam's native ARM64 overlay cannot be preloaded into the x86 process.
-    env.pop('LD_PRELOAD', None)
-    # Keep the desktop's ARM64 library path for FEX's host-side GL/Vulkan
-    # thunks. FEX_ENV overrides it only inside the emulated x86 process.
-    if 'ARLINUX_STEAM_HOST_LIBRARY_PATH' in env:
-        env['LD_LIBRARY_PATH'] = env.pop('ARLINUX_STEAM_HOST_LIBRARY_PATH')
-    env.update(FEX_ROOTFS=str(root), FEX_PORTABLE='1',
-               FEX_THUNKHOSTLIBS=str(fex/'usr/lib/aarch64-linux-gnu/fex-emu/HostThunks'),
-               FEX_THUNKGUESTLIBS=str(fex/'usr/share/fex-emu/GuestThunks'))
-    env['FEX_APP_CONFIG'] = str(root/'app-config.json')
-    libs = root/'usr/lib/x86_64-linux-gnu'
-    env['FEX_ENV'] = 'LD_LIBRARY_PATH='+str(libs)+':'+str(libs/'pulseaudio')
-    os.execve(fex/'usr/bin/FEX', [str(fex/'usr/bin/FEX'), *command], env)
-
-
-if __name__ == '__main__':
-    try:
-        sys.exit(launch(sys.argv[1], sys.argv[2:]))
-    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
-        print(f'ARLinux FEX: {error}', file=sys.stderr)
-        sys.exit(1)

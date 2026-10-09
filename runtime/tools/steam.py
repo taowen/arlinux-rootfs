@@ -233,12 +233,13 @@ def launch(root, arguments):
     if not binary.is_file():
         raise RuntimeError('Steam installation has no native ARM64 executable')
     ensure_dependencies()
+    # GPU overlays are extracted after the rootfs is built. Refresh the native
+    # cache so pressure-vessel can discover their complete ELF dependencies.
+    if Path('/etc/ld.so.conf.d/00-arlinux-graphics.conf').is_file():
+        subprocess.run(['sudo', 'ldconfig'], check=True)
     links(root)
     from steam_fex import configure
     configure(root)
-    # Steam rewrites LD_LIBRARY_PATH for each game. FEX still needs the
-    # desktop's ARM64 graphics libraries on the host side of its thunks.
-    os.environ['ARLINUX_STEAM_HOST_LIBRARY_PATH'] = os.environ.get('LD_LIBRARY_PATH', '')
     os.chdir(root)
     while True:
         result = subprocess.run([str(binary), *arguments])

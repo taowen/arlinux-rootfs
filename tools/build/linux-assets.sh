@@ -273,6 +273,9 @@ import json,pathlib,sys
 pathlib.Path(sys.argv[1]).write_text(json.dumps({'file_format_version':'1.0.0','ICD':{'library_path':'../../../lib/mesa/libvulkan_freedreno.so','api_version':sys.argv[2]}},indent=2)+'\n')
 PY
     cp "$overlay/usr/share/vulkan/icd.d/freedreno_icd.json" "$overlay/usr/share/vulkan/icd.d/arlinux_icd.json"
+    # Container runtimes discover driver dependencies through the standard cache.
+    mkdir -p "$overlay/etc/ld.so.conf.d"
+    printf '/usr/lib/mesa\n' > "$overlay/etc/ld.so.conf.d/00-arlinux-graphics.conf"
     while IFS= read -r -d '' library; do
       readelf -h "$library" >/dev/null 2>&1 && set_relative_rpath "$overlay" "$library"
     done < <(find "$overlay/usr/lib/mesa" -type f -print0)
@@ -288,6 +291,7 @@ PY
       "$generic/usr/share/vulkan/icd.d/freedreno_icd.json"
     mkdir -p "$generic/usr/lib/hybris"
     cp -a "$hybris/." "$generic/usr/lib/hybris/"
+    printf '/usr/lib/mesa\n/usr/lib/hybris\n' > "$generic/etc/ld.so.conf.d/00-arlinux-graphics.conf"
     python3 - "$generic/usr/share/vulkan/icd.d/hybris_icd.json" <<'PY'
 import json,pathlib,sys
 pathlib.Path(sys.argv[1]).write_text(json.dumps({'file_format_version':'1.0.0','ICD':{'library_path':'../../../lib/hybris/libhybris-vulkan-icd.so.0','api_version':'1.3.0'}},indent=2)+'\n')

@@ -46,10 +46,13 @@ restrictions remain active. Seccomp notification listeners are not supported.
 The shared builder installs `/usr/local/bin/bwrap`, a non-isolating command
 launcher. Distribution `PATH` includes `/usr/local/bin` before `/usr/bin`.
 It supports command arguments, environment, working directory, process lifecycle
-and identity binds (source and destination already refer to the same object).
-Namespace, read-only mount and directory-masking options add no isolation; the
-launcher reports this on stderr. It never changes shared directory permissions
-to imitate a private mount. Unknown setup options and non-identity binds fail.
+and child-local path layouts, including directory/file/socket mappings, symlinks,
+empty directories and descriptor-backed files. Identity layouts execute directly;
+other layouts use a temporary scaffold that the parent removes when the child exits.
+The child uses tawcroot's path mappings, not kernel mounts or namespaces.
+Namespace and read-only requests add no security isolation; the launcher reports
+this on stderr. It never changes shared directory permissions to imitate a private
+mount. Unknown setup options and conflicting layouts fail explicitly.
 This is not general Flatpak support or a replacement for real Bubblewrap security.
 
 Optional applications remain user-installed. No Codex configuration is installed;
@@ -117,6 +120,9 @@ GTK2, PipeWire, libnm, lsof and normal X11/audio dependencies are installed
 using Debian's apt. Arch uses pacman for available dependencies but requires
 GTK2 to be installed separately; it is no longer in the main repositories.
 Unrelated Steam links are not overwritten.
+GPU overlays register their library directories in
+`/etc/ld.so.conf.d/00-arlinux-graphics.conf`. The launcher refreshes `ld.so.cache`
+before starting Steam, so its runtime can discover native driver dependencies.
 `arlinux-steam --update` refreshes the bootstrap and starts Valve's updater.
 The default is Valve's stable ARM64 channel. `--channel publicbeta` opts into
 the public beta; `--channel stable` returns to the stable client.
@@ -126,23 +132,27 @@ The launcher directly runs `steamrtarm64/steam` and handles updater exit code
 discovery follows the approach demonstrated by
 [DroidDeck](https://github.com/Droid-Deck/DroidDeck/blob/main/tools/linuxfs/overlay/usr/local/bin/droiddeck-steam-install).
 
-On Debian-based desktops, the launcher registers and selects
-**ARLinux Linux x86-64 (FEX)** before starting Steam. Existing user-selected
-tools and per-game overrides are preserved. No Valve executables are replaced.
-Install **FEX-Emu** (3127680) and **Steam Linux Runtime 3.0 (sniper)** (1628350)
-through Steam first. The first game launch prepares a private runtime under
-`$XDG_CACHE_HOME/arlinux/steam-fex`, downloading signed Debian Bookworm base
-libraries through APT from the Tsinghua mirror. It does not replace the
-desktop's ARM64 libraries. Steam SDK links select x86-64 for `sdk64` and
-ARM64 for `sdkarm64`.
+On Debian-based desktops, Steam retains ownership of compatibility selection.
+The launcher does not register a custom compatibility tool, replace Valve
+executables, or rewrite user-selected Proton/FEX choices. It removes selections
+of the former `arlinux-fex` tool once, with a configuration backup.
 
-The tool runs Valve's FEX directly, without pressure-vessel: Android apps
-cannot create its user namespaces. This is **not a game sandbox**. FEX's
-GL/Vulkan thunks use the desktop's native ARM64 graphics stack; guest library
-paths are kept separate. This does not provide Proton, Windows-game support
-or touchscreen game controls, and compatibility remains game-specific.
-The Steam compatibility-tool approach also builds on
-[DroidDeck's Linux FEX integration](https://github.com/Droid-Deck/DroidDeck/blob/main/tools/linuxfs/overlay/usr/local/bin/droiddeck-fex).
+Install **FEX-Emu** (3127680) and **Steam Linux Runtime 3.0 (sniper)** (1628350)
+through Steam. Restart the client after installing these prerequisites.
+The launcher prepares a private graphics provider under
+`$XDG_CACHE_HOME/arlinux/steam-fex`, using Valve's runtime and FEX thunks plus
+signed Debian Bookworm base libraries downloaded through APT from the Tsinghua
+mirror. It does not replace the desktop's ARM64 libraries.
+
+Valve's FEX tool and pressure-vessel use their standard graphics-provider and
+extra-directory interfaces. The non-isolating `bwrap` adapter supplies their
+private path layout, without creating kernel namespaces. **This is not a game
+sandbox.** Native driver libraries are discovered through `ld.so.cache`;
+Android driver directories and libhybris's auxiliary linker remain available
+inside the runtime. FEX's GL/Vulkan thunks use the desktop's native GPU stack.
+Steam SDK links select x86-64 for `sdk64` and ARM64 for `sdkarm64`.
+Game and compatibility-tool support must be verified individually; native Linux
+game testing does not establish Windows/Proton support.
 
 ## Hosted Android applications
 

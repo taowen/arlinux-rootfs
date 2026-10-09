@@ -1,11 +1,12 @@
 /* Bubblewrap command-launch compatibility for Android. NOT a sandbox.
  * No mount, namespace, capability or seccomp isolation is provided.
- * Only identity binds are supported; never mutate the shared rootfs to
- * imitate a private mount. Unsupported setup operations fail explicitly.
+ * tawcroot provides child-local path mappings, not mount isolation.
+ * Never mutate the shared rootfs to imitate a private mount.
  */
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,16 +39,7 @@ static const char *take(int *i, int argc, char **argv)
     return argv[*i];
 }
 
-static void identity_bind(const char *src, const char *dst, int optional)
-{
-    struct stat a, b;
-    if (stat(src, &a)) {
-        if (optional && errno == ENOENT) return;
-        fail("bind source unavailable", src);
-    }
-    if (stat(dst, &b) || a.st_dev != b.st_dev || a.st_ino != b.st_ino)
-        fail("non-identity bind is not supported", dst);
-}
+#include "bwrap-view.h"
 
 /* Expand --args just as ordinary arguments. Bound allocations independently
  * of the caller's fd size and reject truncated, recursive argument files. */
@@ -99,18 +91,31 @@ int main(int argc, char **argv)
             puts("ARLinux bwrap compatibility launcher (no sandbox isolation)\n"
                  "Launch options: --args FD, --chdir DIR, --argv0 NAME, --new-session, --die-with-parent\n"
                  "Environment: --clearenv, --setenv NAME VALUE, --unsetenv NAME\n"
-                 "Identity mounts: --bind, --ro-bind, --dev-bind (and -try), --proc, --dev\n"
+                 "Path mappings: --bind, --ro-bind, --dev-bind (and -try), --proc, --dev\n"
+                 "Private layout: --symlink TARGET LINK, --dir DIR, --tmpfs DIR, --ro-bind-data FD PATH\n"
                  "Accepted without isolation: --as-pid-1, --perms MODE, --tmpfs DIR, --remount-ro DIR,\n"
                  "--unshare-all and individual --unshare-* options, --share-net, --cap-drop CAP,\n"
                  "--disable-userns, --assert-userns-disabled, --seccomp FD, --add-seccomp-fd FD\n"
                  "Descriptors: --info-fd FD, --sync-fd FD\n"
                  "Namespace, read-only, tmpfs masking and seccomp requests do not isolate commands.\n"
-                 "Non-identity binds and unknown setup operations are rejected.");
+                 "Path layouts require tawcroot. Unknown setup operations are rejected.");
             return 0;
         }
         if (!strcmp(opt, "--args")) { expand_args(&argc, &argv, i); i--; }
         else if (!strcmp(opt, "--chdir")) cwd = take(&i, argc, argv);
         else if (!strcmp(opt, "--argv0")) argv0 = take(&i, argc, argv);
+        else if (!strcmp(opt, "--symlink")) {
+            const char *target = take(&i, argc, argv), *link = take(&i, argc, argv);
+            add_layout(VIEW_LINK, target, link, 0);
+        } else if (!strcmp(opt, "--dir")) add_layout(VIEW_DIR, NULL, take(&i, argc, argv), 0);
+        else if (!strcmp(opt, "--tmpfs")) add_layout(VIEW_EMPTY, NULL, take(&i, argc, argv), 0);
+        else if (!strcmp(opt, "--ro-bind-data") || !strcmp(opt, "--bind-data") || !strcmp(opt, "--file")) {
+            const char *fd = take(&i, argc, argv), *target = take(&i, argc, argv);
+            add_layout(VIEW_DATA, fd, target, 0);
+        }
+        else if (!strcmp(opt, "--not-a-security-boundary") || !strcmp(opt, "--level-prefix")) {
+            /* No isolation is claimed; diagnostics already have a prefix. */
+        }
         else if (!strcmp(opt, "--new-session")) new_session = 1;
         else if (!strcmp(opt, "--die-with-parent")) die_with_parent = 1;
         else if (!strcmp(opt, "--clearenv")) { if (clearenv()) fail("clearenv", strerror(errno)); }
@@ -124,10 +129,10 @@ int main(int argc, char **argv)
                    !strcmp(opt, "--dev-bind") || !strcmp(opt, "--bind-try") ||
                    !strcmp(opt, "--ro-bind-try") || !strcmp(opt, "--dev-bind-try")) {
             const char *src = take(&i, argc, argv), *dst = take(&i, argc, argv);
-            identity_bind(src, dst, strstr(opt, "-try") != NULL);
+            add_layout(VIEW_BIND, src, dst, strstr(opt, "-try") != NULL);
         } else if (!strcmp(opt, "--proc") || !strcmp(opt, "--dev")) {
-            identity_bind(!strcmp(opt, "--proc") ? "/proc" : "/dev", take(&i, argc, argv), 0);
-        } else if (!strcmp(opt, "--perms") || !strcmp(opt, "--tmpfs") ||
+            add_layout(VIEW_BIND, !strcmp(opt, "--proc") ? "/proc" : "/dev", take(&i, argc, argv), 0);
+        } else if (!strcmp(opt, "--perms") ||
                    !strcmp(opt, "--remount-ro") || !strcmp(opt, "--cap-drop")) {
             /* These are isolation-only here. In particular, never chmod a
              * real directory when the caller requested a private tmpfs. */
@@ -154,6 +159,12 @@ int main(int argc, char **argv)
     }
     if (i == argc) fail("missing command", "bwrap");
     fputs("arlinux-bwrap: compatibility mode; no nested filesystem/network isolation\n", stderr);
+    if (die_with_parent) {
+        if (prctl(PR_SET_PDEATHSIG, SIGKILL)) fail("PR_SET_PDEATHSIG", strerror(errno));
+        if (getppid() != parent) return 125;
+    }
+    enter_view(info_fd);
+    if (owner && owner != getpid()) parent = owner;
     if (cwd && chdir(cwd)) fail("chdir", cwd);
     if (new_session && setsid() < 0 && getsid(0) != getpid()) fail("setsid", strerror(errno));
     if (die_with_parent) {

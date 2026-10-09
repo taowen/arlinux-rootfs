@@ -115,6 +115,7 @@ echo '== Linux GPU stack =='
 mesa="$repo/build/linux/mesa/lib"
 hybris="$repo/build/linux/libhybris/install/usr/lib/hybris"
 python3 "$repo/tools/build/mesa-debs.py"
+python3 "$repo/tools/build/mesa-arch.py"
 
 # Every GPU library finds its neighbours relative to its own location. The
 # exact Android app-private directory is supplied only when the guest runs.
@@ -164,6 +165,10 @@ PY
     if [[ "$product" == yibu || "$product" == debian ]]; then
         mkdir -p "$rootfs/usr/lib/arlinux/mesa-packages"
         cp build/linux/mesa-debs/*.deb "$rootfs/usr/lib/arlinux/mesa-packages/"
+    elif [[ "$product" == arch || "$product" == omarchy ]]; then
+        mkdir -p "$rootfs/usr/lib/arlinux/mesa-packages"
+        cp build/linux/mesa-arch/*.pkg.tar.zst "$rootfs/usr/lib/arlinux/mesa-packages/"
+        install -Dm755 runtime/tools/install-mesa-arch.sh "$rootfs/usr/lib/arlinux/install-mesa-arch.sh"
     fi
     cp examples/desk-auto/dump-atspi.py examples/desk-auto/atspi-do.py \
       "$rootfs/usr/lib/arlinux/guest/"

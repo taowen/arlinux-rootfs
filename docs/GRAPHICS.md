@@ -26,7 +26,11 @@ Debian and Yibu use Debian's standard GLVND dispatch libraries with ARLinux's
 Mesa EGL, GLX, DRI and GBM provider packages. These packages share one Zink-only
 Gallium build, without LLVM or unrelated desktop GPU drivers. APT sees real
 provider packages and their dependencies, so installing applications does not
-require a second copy of Debian's Mesa stack. Providing the GBM library does
+require a second copy of Debian's Mesa stack. Arch and Omarchy use the same
+provider payload in a real `mesa` pacman package, retaining Arch's GLVND
+dispatch libraries. Pacman keeps this Android-specific provider during
+repository upgrades; unused LLVM dependencies are not required. Providing the
+GBM library does
 not create an Android DRM render device or add DMA-BUF presentation support.
 
 The runtime supplies the driver search paths and GPU environment to the entire

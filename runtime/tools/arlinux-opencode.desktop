@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=OpenCode
+Comment=Install OpenCode on first launch (internet required), then open the AI assistant
+Comment[zh_CN]=首次使用联网安装 OpenCode，可能需要几分钟；之后打开 AI 助手
+Exec=arlinux-opencode --desktop
+Icon=/usr/share/pixmaps/arlinux-opencode.png
+Terminal=true
+Categories=Development;
+StartupNotify=false

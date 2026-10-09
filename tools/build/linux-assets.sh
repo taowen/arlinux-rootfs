@@ -51,58 +51,6 @@ seed_rootfs() (
     cp -a --reflink=auto "$entry/rootfs/." "$destination/"
 )
 
-# The pinned OpenCode package is part of the distribution, not a first-boot
-# network dependency. Keep downloaded artifacts outside the source tree.
-embed_opencode() {
-    local product_dir="$1" rootfs="$2"
-    local name version expected url extension cache partial actual
-    [[ -f "$product_dir/guest/opencode-downloads.tsv" ]] || return 0
-    IFS=$'\t' read -r name version expected url < <(
-        awk -F '\t' '$1 == "opencode-desktop" { print; exit }' \
-            "$product_dir/guest/opencode-downloads.tsv")
-    [[ "$name" == opencode-desktop && "$expected" =~ ^[0-9a-f]{64}$ &&
-       "$url" == https://* ]] || {
-        echo "Invalid OpenCode manifest: $product_dir" >&2; return 1;
-    }
-    extension="${url##*.}"
-    [[ "$extension" == deb || "$extension" == rpm ]] || {
-        echo "Unsupported OpenCode package: $url" >&2; return 1;
-    }
-    mkdir -p "$ARLINUX_CACHE_DIR/downloads"
-    cache="$ARLINUX_CACHE_DIR/downloads/$expected.$extension"
-    actual="$(sha256sum "$cache" 2>/dev/null | cut -d' ' -f1 || true)"
-    if [[ "$actual" != "$expected" ]]; then
-        partial="$(mktemp "$cache.part.XXXXXXXX")"
-        echo "Downloading OpenCode Desktop $version for $(basename "$product_dir")..."
-        if ! curl -fL --retry 3 --connect-timeout 20 -o "$partial" "$url"; then
-            rm -f "$partial"; return 1
-        fi
-        actual="$(sha256sum "$partial" | cut -d' ' -f1)"
-        if [[ "$actual" != "$expected" ]]; then
-            rm -f "$partial"
-            echo "OpenCode Desktop SHA-256 verification failed" >&2
-            return 1
-        fi
-        mv -f "$partial" "$cache"
-    fi
-    if [[ "$extension" == rpm ]]; then
-        # Arch's OpenCode artifact is an RPM, but its payload is ordinary Linux
-        # files. Unpack it once on the build host; the phone needs no RPM tool.
-        bsdtar -xpf "$cache" -C "$rootfs"
-        [[ -f "$rootfs/opt/OpenCode/ai.opencode.desktop" &&
-           -f "$rootfs/opt/OpenCode/chrome-sandbox" ]] || {
-            echo "OpenCode RPM is missing its executable files" >&2; return 1;
-        }
-        install -d "$rootfs/usr/bin"
-        ln -sfn /opt/OpenCode/ai.opencode.desktop "$rootfs/usr/bin/ai.opencode.desktop"
-        chmod 755 "$rootfs/opt/OpenCode/ai.opencode.desktop" \
-            "$rootfs/opt/OpenCode/chrome-sandbox"
-        printf '%s\n' "$version" > "$rootfs/opt/OpenCode/.arlinux-version"
-    else
-        install -Dm644 "$cache" "$rootfs/usr/lib/arlinux/packages/opencode-desktop.deb"
-    fi
-}
-
 input_id() {
     local product="$1"
     local inputs=(runtime graphics-protocols examples tools/build tools/arlinux-app-data)
@@ -186,7 +134,6 @@ for product in "${pending[@]}"; do
     assets="$product_dir/build/assets"
     rm -rf "$stage/$product" "$assets"; mkdir -p "$rootfs" "$assets"
     seed_rootfs "$product" "$rootfs"
-    embed_opencode "$product_dir" "$rootfs"
     python3 - "$product_dir/product.json" "$rootfs" <<'PY'
 import json, os, pathlib, sys
 product = json.loads(pathlib.Path(sys.argv[1]).read_text())
@@ -202,6 +149,10 @@ PY
     install -Dm755 runtime/tools/arlinux-steam "$rootfs/usr/bin/arlinux-steam"
     install -Dm644 runtime/tools/arlinux-steam.desktop "$rootfs/usr/share/applications/arlinux-steam.desktop"
     install -Dm644 runtime/tools/steam.png "$rootfs/usr/share/pixmaps/arlinux-steam.png"
+    install -Dm644 runtime/tools/opencode.py "$rootfs/usr/lib/arlinux/opencode.py"
+    install -Dm755 runtime/tools/arlinux-opencode "$rootfs/usr/bin/arlinux-opencode"
+    install -Dm644 runtime/tools/arlinux-opencode.desktop "$rootfs/usr/share/applications/arlinux-opencode.desktop"
+    install -Dm644 runtime/tools/opencode.png "$rootfs/usr/share/pixmaps/arlinux-opencode.png"
     install -Dm755 "build/linux/runtime/$product/bwrap" "$rootfs/usr/local/bin/bwrap"
     cp tools/arlinux-app-data/hosted-ime.py tools/arlinux-app-data/org.arlinux.HostedInput.service \
       "$rootfs/usr/lib/arlinux/"
@@ -252,7 +203,7 @@ profile = json.loads(profile_file.read_text()); profile['launch']['environment']
 PY
     tar -C "$rootfs" --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
       --exclude=./proc --exclude=./sys --exclude=./dev --exclude=./run --exclude=./tmp \
-      --exclude=./var/run --exclude=./var/lock -cf - . | zstd -T0 -8 -f -o "$assets/rootfs.tar.zst"
+      --exclude=./var/run --exclude=./var/lock -cf - . | zstd -T4 -19 -f -o "$assets/rootfs.tar.zst"
     sha256sum "$assets/rootfs.tar.zst" | cut -d' ' -f1 > "$assets/rootfs-seed-id"
 
     overlay="$stage/$product/gpu"

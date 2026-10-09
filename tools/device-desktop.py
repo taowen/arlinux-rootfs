@@ -27,8 +27,8 @@ def rewrite(seed: Path, output: Path, replacements: dict[str, bytes | Path]) -> 
     pending = output.with_suffix('.zip.part')
     with zipfile.ZipFile(seed) as source, zipfile.ZipFile(pending, 'w') as target:
         manifest = json.loads(source.read('manifest.json'))
-        if manifest['distributionId'] != 'debian':
-            raise ValueError('The device desktop installer currently targets Debian')
+        if manifest['distributionId'] not in ('debian', 'yibu'):
+            raise ValueError('The device desktop installer targets Debian-based offline desktops')
         for name in sorted(set(manifest['files']) | set(replacements)):
             value = replacements.get(name)
             digest = hashlib.sha256()
@@ -80,13 +80,15 @@ def seal(seed: Path, snapshot: Path, output: Path) -> None:
     with tempfile.TemporaryDirectory(prefix='arlinux-seal-') as temp:
         compressed = Path(temp) / 'rootfs.tar.zst'
         with compressed.open('wb') as dest:
-            compressor = subprocess.Popen(['zstd', '-T0', '-8', '-c'], stdin=subprocess.PIPE, stdout=dest)
+            compressor = subprocess.Popen(['zstd', '-T4', '-19', '-c'], stdin=subprocess.PIPE, stdout=dest)
             try:
                 with tarfile.open(snapshot, 'r|') as source, tarfile.open(fileobj=compressor.stdin, mode='w|') as target:
                     for member in source:
                         name = member.name.removeprefix('./').rstrip('/')
                         if '..' in name.split('/') or name.startswith('/'):
                             raise ValueError('Unsafe snapshot entry: ' + name)
+                        if name == 'opt/OpenCode' or name.startswith('opt/OpenCode/'):
+                            raise ValueError('OpenCode must be installed on demand, not exported in the offline desktop')
                         if name.split('/')[0] not in allowed or name in dropped or name.startswith(prefixes):
                             continue
                         if not (member.isfile() or member.isdir() or member.issym() or member.islnk()):
@@ -123,7 +125,7 @@ def seal(seed: Path, snapshot: Path, output: Path) -> None:
                     compressor.kill()
                     compressor.wait()
         required = {'usr/share/arlinux/offline-desktop', 'usr/share/arlinux/packages.tsv',
-                    'opt/OpenCode/ai.opencode.desktop', 'usr/bin/thunar', 'usr/bin/mousepad'}
+                    'usr/bin/arlinux-opencode', 'usr/bin/thunar', 'usr/bin/mousepad'}
         if not required <= seen:
             raise ValueError('Incomplete device desktop: ' + ', '.join(sorted(required - seen)))
         with compressed.open('rb') as stream:

@@ -7,7 +7,10 @@ os.environ["GDK_BACKEND"] = "wayland"
 import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
-from gi.repository import Gdk, Gio, Gtk
+from gi.repository import Gdk, Gio, GLib, Gtk
+
+# Give the compositor a stable identity for the launcher, independent of its filename.
+GLib.set_prgname("org.arlinux.Applications")
 
 # Helpers that are installed with desktop entries but are not applications a user opens.
 HIDDEN = {

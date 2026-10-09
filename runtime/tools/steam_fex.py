@@ -68,11 +68,7 @@ def remove_old_tool(steam):
 def configure(steam):
     remove_old_tool(steam)
     os.environ.setdefault('PRESSURE_VESSEL_BWRAP', '/usr/local/bin/bwrap')
-    try:
-        fex, root = prepare(steam)
-    except IncompleteRuntime as error:
-        print(f'Steam runtime: {error}. Restart Steam after the download completes.', flush=True)
-        return
+    fex, root = prepare(steam)
     os.environ.setdefault('STEAM_COMPAT_GRAPHICS_PROVIDER', str(root/'graphics_provider.json'))
     os.environ.setdefault('STEAM_COMPAT_FEX_CONFIG',
                           'TSOEnabled:1,Multiblock:1,ThunksDB_GL:1,ThunksDB_Vulkan:1')

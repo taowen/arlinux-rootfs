@@ -228,6 +228,42 @@ def install(root, channel):
     print(f'Steam ARM64 bootstrap build {version} ready; starting Valve updater.', flush=True)
 
 
+def runtime_installed(root):
+    from steam_fex import app_directory, IncompleteRuntime
+    try:
+        app_directory(root, '3127680')
+        runtime = app_directory(root, '1628350')
+        return any(runtime.glob('sniper_platform_*/usr-mtree.txt.gz'))
+    except IncompleteRuntime:
+        return False
+
+
+def bootstrap_runtime(binary, root, arguments):
+    """Let Steam download its depots, then restart with the prepared provider.
+
+    Environment changes cannot reach an already running client. This is a
+    first-install session only; ordinary game launches remain owned by Steam.
+    Never force-kill a client that declines its normal shutdown request.
+    """
+    print('First-time game setup: install FEX-Emu and Steam Linux Runtime 3.0 '
+          '(sniper) in Steam. Steam will restart once both downloads finish.', flush=True)
+    with subprocess.Popen([str(binary), *arguments]) as client:
+        while True:
+            try:
+                return client.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                if not runtime_installed(root):
+                    continue
+            print('Game runtimes downloaded. Restarting Steam to prepare graphics.', flush=True)
+            subprocess.run([str(binary), '-shutdown'], check=True, timeout=30)
+            try:
+                result = client.wait(timeout=60)
+            except subprocess.TimeoutExpired:
+                print('Steam is still busy. Close it normally to finish game setup.', flush=True)
+                return client.wait()
+            return 42 if result == 0 else result
+
+
 def launch(root, arguments):
     binary = root/'steamrtarm64/steam'
     if not binary.is_file():
@@ -239,16 +275,19 @@ def launch(root, arguments):
         subprocess.run(['sudo', 'ldconfig'], check=True)
     links(root)
     from steam_fex import configure
-    configure(root)
     os.chdir(root)
     while True:
-        result = subprocess.run([str(binary), *arguments])
-        if result.returncode != 42:  # Valve updater requests a client restart.
-            if result.returncode < 0:
-                print(f'Steam stopped with signal {-result.returncode}. '
+        if runtime_installed(root):
+            configure(root)
+            status = subprocess.run([str(binary), *arguments]).returncode
+        else:
+            status = bootstrap_runtime(binary, root, arguments)
+        if status != 42:  # Valve updater or first-time runtime setup restart.
+            if status < 0:
+                print(f'Steam stopped with signal {-status}. '
                       f'Client logs: {root / "logs"}', file=sys.stderr)
-                return 128 - result.returncode
-            return result.returncode
+                return 128 - status
+            return status
 
 
 def require_robust_futex():

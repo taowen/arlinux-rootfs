@@ -42,15 +42,16 @@ def main():
     native_files = ('files/bin-arm64/wine', 'files/bin-arm64/wineserver',
                     'files/lib/wine/aarch64-unix/ntdll.so',
                     'files/lib/wine/aarch64-unix/nsiproxy.so')
-    pe_files = tuple(f'files/lib/wine/{arch}-windows/iphlpapi.dll'
-                     for arch in ('aarch64', 'i386', 'x86_64')) + ('files/lib/wine/i386-windows/kernelbase.dll',)
+    pe_files = tuple(f'files/lib/wine/{arch}-windows/{module}.dll'
+                     for arch in ('aarch64', 'i386', 'x86_64')
+                     for module in ('iphlpapi', 'ntdll', 'kernel32', 'kernelbase', 'windows.ui'))
     dxvk_files = tuple(f'files/lib/wine/dxvk/{arch}-windows/{module}.dll'
                       for arch in ('aarch64', 'i386', 'x86_64')
                       for module in ('dxgi', 'd3d11', 'd3d10core', 'd3d9', 'd3d8'))
     dxvk_sources = tuple(str(path.relative_to(redist))
                          for path in sorted((redist/'files/share/arlinux-dxvk').iterdir())
                          if path.is_file())
-    files = ('proton', 'files/lib/wine/dxvk/version') + native_files + pe_files + dxvk_files + dxvk_sources
+    files = ('proton', 'files/lib/wine/dxvk/version', 'files/share/wine/wine.inf') + native_files + pe_files + dxvk_files + dxvk_sources
     manifest = {'format': 1, 'architecture': 'aarch64',
                 'development': args.development,
                 'proton_commit': git(source, 'rev-parse', 'HEAD').decode().strip(),
@@ -77,7 +78,10 @@ def main():
                 header = binary.read(20)
             if header[:6] != b'\x7fELF\x02\x01' or header[18:20] != b'\xb7\x00':
                 raise ValueError(f'Not an ARM64 Proton redist: {name}')
-        pe_architectures = dict(zip(pe_files, (0xaa64, 0x14c, 0x8664, 0x14c)))
+        pe_architectures = {name: {'aarch64-windows': 0xaa64,
+                                  'i386-windows': 0x14c,
+                                  'x86_64-windows': 0x8664}[name.split('/')[-2]]
+                            for name in pe_files}
         for name in dxvk_files:
             architecture = name.split('/')[-2]
             # ARM64X uses an ARM64 on-disk PE header plus hybrid metadata.

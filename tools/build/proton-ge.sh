@@ -47,6 +47,12 @@ mkdir "$stage/tools" "$stage/core"
     --without-mingw --without-x --without-wayland --without-freetype \
     && make -j"${JOBS:-8}" tools/widl/all tools/winebuild/all tools/winegcc/all tools/wmc/all tools/wrc/all nls/all)
 # Keep GE's ARM64EC/ARM64X builtins usable by both native ARM64 and x64 clients.
+core_modules=()
+for arch in aarch64 i386 x86_64; do
+    for module in ntdll kernel32 kernelbase windows.ui; do
+        core_modules+=("dlls/$module/$arch-windows/$module.dll")
+    done
+done
 (cd "$stage/core" && "$stage/wine/configure" --host=aarch64-linux-gnu --enable-win64 \
     --enable-archs=arm64ec,aarch64,i386,x86_64 \
     --with-wine-tools="$stage/tools" --disable-tests --without-x --without-wayland \
@@ -54,9 +60,10 @@ mkdir "$stage/tools" "$stage/core"
     && make -j"${JOBS:-8}" dlls/ntdll/ntdll.so dlls/nsiproxy.sys/nsiproxy.so server/wineserver \
         dlls/iphlpapi/aarch64-windows/iphlpapi.dll \
         dlls/iphlpapi/i386-windows/iphlpapi.dll dlls/iphlpapi/x86_64-windows/iphlpapi.dll \
-        dlls/kernelbase/i386-windows/kernelbase.dll)
+        "${core_modules[@]}" loader/wine.inf)
 tar -xzf "$base" -C "$stage"
 redist="$stage/$version-aarch64"
+install -m644 "$stage/core/loader/wine.inf" "$redist/files/share/wine/wine.inf"
 install -m755 "$stage/core/dlls/ntdll/ntdll.so" "$redist/files/lib/wine/aarch64-unix/ntdll.so"
 install -m755 "$stage/core/dlls/nsiproxy.sys/nsiproxy.so" "$redist/files/lib/wine/aarch64-unix/nsiproxy.so"
 install -m755 "$stage/core/server/wineserver" "$redist/files/bin-arm64/wineserver"
@@ -64,8 +71,12 @@ for arch in aarch64 i386 x86_64; do
     install -m755 "$stage/core/dlls/iphlpapi/$arch-windows/iphlpapi.dll" \
         "$redist/files/lib/wine/$arch-windows/iphlpapi.dll"
 done
-install -m755 "$stage/core/dlls/kernelbase/i386-windows/kernelbase.dll" \
-    "$redist/files/lib/wine/i386-windows/kernelbase.dll"
+for arch in aarch64 i386 x86_64; do
+    for module in ntdll kernel32 kernelbase windows.ui; do
+        install -m755 "$stage/core/dlls/$module/$arch-windows/$module.dll" \
+            "$redist/files/lib/wine/$arch-windows/$module.dll"
+    done
+done
 # GE's DXVK 3.x requires storageBuffer8BitAccess, unavailable on Adreno 6xx.
 # Keep the Windows-app runtime GPU accelerated with one Vulkan 1.3 baseline.
 bash "$repo/tools/build/dxvk-windows.sh" "$3" "$stage/dxvk"

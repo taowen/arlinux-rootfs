@@ -19,6 +19,25 @@ import zipfile
 
 CDN = 'https://client-update.fastly.steamstatic.com/'
 CHANNELS = ('stable', 'publicbeta')
+PREINSTALLED = Path('/opt/arlinux/steam-client')
+
+
+def seed_client(root):
+    """Populate a new user's installation from the optional, account-free seed.
+
+    Each instance has its own extracted seed. Move it into the user's directory
+    instead of copying gigabytes; Valve updates it normally thereafter. Existing
+    installations and explicitly requested channels are never replaced.
+    """
+    if (root/'steamrtarm64/steam').is_file() or not (PREINSTALLED/'steamrtarm64/steam').is_file():
+        return
+    if root.exists() and any(root.iterdir()):
+        raise RuntimeError('Preserving an incomplete Steam installation; use --update to repair it')
+    root.parent.mkdir(parents=True, exist_ok=True)
+    if root.exists():
+        root.rmdir()
+    PREINSTALLED.rename(root)
+    print('Using the preinstalled Steam client. Valve may check for updates.', flush=True)
 
 
 def keyvalues(text):
@@ -323,6 +342,8 @@ def main():
     cache.mkdir(parents=True, exist_ok=True)
     with (cache/'install.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        if not args.update and not args.channel:
+            seed_client(root)
         if args.update or args.channel or not (root/'steamrtarm64/steam').is_file():
             install(root, args.channel or CHANNELS[0])
     return launch(root, steam_arguments)

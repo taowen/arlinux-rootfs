@@ -24,3 +24,6 @@
 [submodule "distributions/yibu"]
 	path = distributions/yibu
 	url = https://github.com/taowen/arlinux-yibu.git
+[submodule "third_party/proton"]
+	path = third_party/proton
+	url = https://github.com/taowen/Proton.git

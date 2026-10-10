@@ -102,10 +102,44 @@ static int deepest_first(const void *a, const void *b)
     return x < y ? 1 : x > y ? -1 : 0;
 }
 
+/* A foreign /usr still needs the native emulator's multiarch libraries.
+ * Keep its native directory only when the supplied /usr lacks it; never
+ * replace an explicitly supplied native runtime. This is not isolation. */
+static void preserve_native_libraries(void)
+{
+#if defined(__aarch64__)
+    const char *directory = "/usr/lib/aarch64-linux-gnu";
+    for (size_t i = 0; i < layout_count; i++) {
+        if (!strcmp(layout[i].target, directory)) return;
+    }
+    for (size_t i = 0; i < layout_count; i++) {
+        struct view_entry *entry = &layout[i];
+        if (entry->kind != VIEW_BIND || strcmp(entry->target, "/usr")) continue;
+        char *candidate = join_path(entry->source, "lib/aarch64-linux-gnu/libc.so.6");
+        struct stat st;
+        int missing = stat(candidate, &st) && errno == ENOENT;
+        free(candidate);
+        if (missing) {
+            add_layout(VIEW_BIND, directory, directory, 1);
+            /* GLVND vendor links point into these sibling directories. */
+            const char *graphics[] = {"/usr/lib/mesa", "/usr/lib/hybris"};
+            for (size_t g = 0; g < sizeof graphics / sizeof graphics[0]; g++) {
+                int supplied = 0;
+                for (size_t n = 0; n < layout_count; n++)
+                    if (!strcmp(layout[n].target, graphics[g])) supplied = 1;
+                if (!supplied) add_layout(VIEW_BIND, graphics[g], graphics[g], 1);
+            }
+        }
+        return;
+    }
+#endif
+}
+
 /* Returns only in the child (or for an unchanged identity layout). */
 static void enter_view(int info_fd)
 {
     if (!private_view) return;
+    preserve_native_libraries();
     struct rlimit limit;
     if (getrlimit(RLIMIT_NOFILE, &limit)) fail("getrlimit", strerror(errno));
     /* tawcroot's protected anchors start at fd 1000; Steam may lower soft to 1024. */

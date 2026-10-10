@@ -44,7 +44,7 @@ def main():
                     'files/lib/wine/aarch64-unix/nsiproxy.so')
     pe_files = tuple(f'files/lib/wine/{arch}-windows/{module}.dll'
                      for arch in ('aarch64', 'i386', 'x86_64')
-                     for module in ('iphlpapi', 'ntdll', 'kernel32', 'kernelbase', 'windows.ui', 'netprofm', 'dxcore')) + tuple(
+                     for module in ('iphlpapi', 'ntdll', 'kernel32', 'kernelbase', 'windows.ui', 'netprofm', 'dxcore', 'ucrtbase')) + tuple(
                          f'files/lib/wine/{arch}-windows/wow64.dll' for arch in ('aarch64', 'x86_64'))
     dxvk_files = tuple(f'files/lib/wine/dxvk/{arch}-windows/{module}.dll'
                       for arch in ('aarch64', 'i386', 'x86_64')

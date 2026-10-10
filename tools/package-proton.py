@@ -28,6 +28,10 @@ def main():
     parser.add_argument('--integration-source', type=Path, help='ARLinux GE fork checkout')
     args = parser.parse_args()
     source, redist = args.source.resolve(), args.redist.resolve()
+    for checkout in (source, source/'wine'):
+        root = Path(git(checkout, 'rev-parse', '--show-toplevel').decode().strip())
+        if root.resolve() != checkout.resolve():
+            raise ValueError(f'Source checkout is not initialized: {checkout}')
     wine_diff = git(source/'wine', 'diff', 'HEAD')
     if wine_diff and not args.development:
         raise ValueError('Release bundles require committed Wine sources; use --development for experiments')
@@ -39,14 +43,14 @@ def main():
                     'files/lib/wine/aarch64-unix/ntdll.so',
                     'files/lib/wine/aarch64-unix/nsiproxy.so')
     pe_files = tuple(f'files/lib/wine/{arch}-windows/iphlpapi.dll'
-                     for arch in ('aarch64', 'i386', 'x86_64'))
+                     for arch in ('aarch64', 'i386', 'x86_64')) + ('files/lib/wine/i386-windows/kernelbase.dll',)
     dxvk_files = tuple(f'files/lib/wine/dxvk/{arch}-windows/{module}.dll'
                       for arch in ('aarch64', 'i386', 'x86_64')
                       for module in ('dxgi', 'd3d11', 'd3d10core', 'd3d9', 'd3d8'))
     dxvk_sources = tuple(str(path.relative_to(redist))
                          for path in sorted((redist/'files/share/arlinux-dxvk').iterdir())
                          if path.is_file())
-    files = ('proton',) + native_files + pe_files + dxvk_files + dxvk_sources
+    files = ('proton', 'files/lib/wine/dxvk/version') + native_files + pe_files + dxvk_files + dxvk_sources
     manifest = {'format': 1, 'architecture': 'aarch64',
                 'development': args.development,
                 'proton_commit': git(source, 'rev-parse', 'HEAD').decode().strip(),
@@ -73,10 +77,11 @@ def main():
                 header = binary.read(20)
             if header[:6] != b'\x7fELF\x02\x01' or header[18:20] != b'\xb7\x00':
                 raise ValueError(f'Not an ARM64 Proton redist: {name}')
-        pe_architectures = dict(zip(pe_files, (0xaa64, 0x14c, 0x8664)))
+        pe_architectures = dict(zip(pe_files, (0xaa64, 0x14c, 0x8664, 0x14c)))
         for name in dxvk_files:
             architecture = name.split('/')[-2]
-            pe_architectures[name] = {'aarch64-windows': 0xa64e,
+            # ARM64X uses an ARM64 on-disk PE header plus hybrid metadata.
+            pe_architectures[name] = {'aarch64-windows': 0xaa64,
                                       'i386-windows': 0x14c,
                                       'x86_64-windows': 0x8664}[architecture]
         for name, machine in pe_architectures.items():

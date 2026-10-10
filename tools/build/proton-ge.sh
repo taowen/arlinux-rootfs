@@ -12,6 +12,9 @@ source_dir="$(realpath "$1")"
 base="$(realpath "$2")"
 export PATH="$(realpath "$3"):$PATH"
 output="$(realpath -m "$4")"
+[[ -f "$source_dir/wine/configure.ac" && \
+   "$(git -C "$source_dir/wine" rev-parse --show-toplevel)" == "$(realpath "$source_dir/wine")" ]] \
+    || { echo 'Initialize and prepare the matching Wine submodule first.' >&2; exit 2; }
 version=GE-Proton11-7
 expected=741cf70256f13b20d44952b590defd68b115814097f911c9ec053a64d33795267e2a982a5ce939407e8b649613eb3943bb2e2ebf4794d302ff96b83b61457cdd
 source_revision="$(git -C "$source_dir" rev-parse HEAD)"
@@ -24,7 +27,7 @@ fork_revision="$(git -C "$repo/third_party/proton" rev-parse HEAD)"
 for tool in aarch64-linux-gnu-gcc aarch64-w64-mingw32-clang make autoconf bison flex patch; do
     command -v "$tool" >/dev/null || { echo "Missing build tool: $tool" >&2; exit 2; }
 done
-aarch64-w64-mingw32-clang -marm64x -fsyntax-only -x c /dev/null \
+aarch64-w64-mingw32-clang -marm64x -shared -x c /dev/null -o /dev/null -### 2>/dev/null \
     || { echo 'LLVM-MinGW with ARM64X support (LLVM 23+) is required.' >&2; exit 2; }
 mkdir -p "$repo/build/proton-ge"
 stage="$(mktemp -d "$repo/build/proton-ge/core.XXXXXXXX")"
@@ -42,7 +45,7 @@ done
 mkdir "$stage/tools" "$stage/core"
 (cd "$stage/tools" && "$stage/wine/configure" --enable-win64 --disable-tests \
     --without-mingw --without-x --without-wayland --without-freetype \
-    && make -j"${JOBS:-8}" tools/widl/all tools/winebuild/all tools/winegcc/all tools/wmc/all tools/wrc/all)
+    && make -j"${JOBS:-8}" tools/widl/all tools/winebuild/all tools/winegcc/all tools/wmc/all tools/wrc/all nls/all)
 # Keep GE's ARM64EC/ARM64X builtins usable by both native ARM64 and x64 clients.
 (cd "$stage/core" && "$stage/wine/configure" --host=aarch64-linux-gnu --enable-win64 \
     --enable-archs=arm64ec,aarch64,i386,x86_64 \
@@ -50,7 +53,8 @@ mkdir "$stage/tools" "$stage/core"
     --without-freetype --without-unwind \
     && make -j"${JOBS:-8}" dlls/ntdll/ntdll.so dlls/nsiproxy.sys/nsiproxy.so server/wineserver \
         dlls/iphlpapi/aarch64-windows/iphlpapi.dll \
-        dlls/iphlpapi/i386-windows/iphlpapi.dll dlls/iphlpapi/x86_64-windows/iphlpapi.dll)
+        dlls/iphlpapi/i386-windows/iphlpapi.dll dlls/iphlpapi/x86_64-windows/iphlpapi.dll \
+        dlls/kernelbase/i386-windows/kernelbase.dll)
 tar -xzf "$base" -C "$stage"
 redist="$stage/$version-aarch64"
 install -m755 "$stage/core/dlls/ntdll/ntdll.so" "$redist/files/lib/wine/aarch64-unix/ntdll.so"
@@ -60,12 +64,15 @@ for arch in aarch64 i386 x86_64; do
     install -m755 "$stage/core/dlls/iphlpapi/$arch-windows/iphlpapi.dll" \
         "$redist/files/lib/wine/$arch-windows/iphlpapi.dll"
 done
+install -m755 "$stage/core/dlls/kernelbase/i386-windows/kernelbase.dll" \
+    "$redist/files/lib/wine/i386-windows/kernelbase.dll"
 # GE's DXVK 3.x requires storageBuffer8BitAccess, unavailable on Adreno 6xx.
 # Keep the Windows-app runtime GPU accelerated with one Vulkan 1.3 baseline.
 bash "$repo/tools/build/dxvk-windows.sh" "$3" "$stage/dxvk"
 for arch in aarch64 i386 x86_64; do
     cp "$stage/dxvk/$arch-windows/"*.dll "$redist/files/lib/wine/dxvk/$arch-windows/"
 done
+install -m644 "$stage/dxvk/source-commit" "$redist/files/lib/wine/dxvk/version"
 mkdir -p "$redist/files/share/arlinux-dxvk"
 cp "$stage/dxvk/source-commit" "$stage/dxvk/source.tar.gz" \
     "$stage/dxvk/"*.patch "$redist/files/share/arlinux-dxvk/"

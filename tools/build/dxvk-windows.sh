@@ -8,7 +8,7 @@ fi
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 compiler="$(realpath "$1")"
 output="$(realpath -m "$2")"
-"$compiler/aarch64-w64-mingw32-clang" -marm64x -fsyntax-only -x c /dev/null \
+"$compiler/aarch64-w64-mingw32-clang" -marm64x -shared -x c /dev/null -o /dev/null -### 2>/dev/null \
     || { echo 'LLVM-MinGW with ARM64X support (LLVM 23+) is required.' >&2; exit 2; }
 revision=c3dd74be6baec53786d4e064a572185b70347a17
 patch_file="$repo/third_party/proton/patches/dxvk/dxvk-singleton-exception-safety.patch"
@@ -41,6 +41,7 @@ for arch in aarch64 x86_64 i386; do
         family=x86
     fi
     cross="$cache/$arch.ini"
+    if [[ ! -f "$cross" ]]; then
     cat > "$cross" <<EOF
 [binaries]
 c = '$compiler/$target-w64-mingw32-clang'
@@ -59,6 +60,7 @@ cpu_family = '$family'
 cpu = '$target'
 endian = 'little'
 EOF
+    fi
     if [[ ! -f "$cache/$arch/build.ninja" ]]; then
         meson setup "$cache/$arch" "$cache/source" --cross-file "$cross" \
             --buildtype release --force-fallback-for=libdisplay-info

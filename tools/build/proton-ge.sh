@@ -30,25 +30,36 @@ echo "Build directory: $stage"
 # Never run upstream reset/clean scripts in an existing developer checkout.
 mkdir "$stage/wine"
 tar -C "$source_dir/wine" --exclude=.git -cf - . | tar -C "$stage/wine" -xf -
-cp "$repo/third_party/proton/patches/arlinux/0001-ntdll-map-executable-sections-before-relocations.patch" "$stage/android.patch"
-if ! patch -d "$stage/wine" -p1 -R --dry-run < "$stage/android.patch" >/dev/null 2>&1; then
-    patch -d "$stage/wine" -p1 --forward < "$stage/android.patch"
-fi
+cp -a "$repo/third_party/proton/patches/arlinux" "$stage/android-patches"
+for android_patch in "$stage/android-patches"/*.patch; do
+    if ! patch -d "$stage/wine" -p1 -R --dry-run < "$android_patch" >/dev/null 2>&1; then
+        patch -d "$stage/wine" -p1 --forward < "$android_patch"
+    fi
+done
 # Generate tools from this same Wine source, not from a different Proton version.
 mkdir "$stage/tools" "$stage/core"
 (cd "$stage/tools" && "$stage/wine/configure" --enable-win64 --disable-tests \
     --without-mingw --without-x --without-wayland --without-freetype \
-    && make -j"${JOBS:-8}" tools/widl/all tools/winebuild/all tools/wmc/all tools/wrc/all)
+    && make -j"${JOBS:-8}" tools/widl/all tools/winebuild/all tools/winegcc/all tools/wmc/all tools/wrc/all)
+# Keep GE's ARM64EC/ARM64X builtins usable by both native ARM64 and x64 clients.
 (cd "$stage/core" && "$stage/wine/configure" --host=aarch64-linux-gnu --enable-win64 \
+    --enable-archs=arm64ec,aarch64,i386,x86_64 \
     --with-wine-tools="$stage/tools" --disable-tests --without-x --without-wayland \
     --without-freetype --without-unwind \
-    && make -j"${JOBS:-8}" dlls/ntdll/ntdll.so server/wineserver)
+    && make -j"${JOBS:-8}" dlls/ntdll/ntdll.so dlls/nsiproxy.sys/nsiproxy.so server/wineserver \
+        dlls/iphlpapi/aarch64-windows/iphlpapi.dll \
+        dlls/iphlpapi/i386-windows/iphlpapi.dll dlls/iphlpapi/x86_64-windows/iphlpapi.dll)
 tar -xzf "$base" -C "$stage"
 redist="$stage/$version-aarch64"
 install -m755 "$stage/core/dlls/ntdll/ntdll.so" "$redist/files/lib/wine/aarch64-unix/ntdll.so"
+install -m755 "$stage/core/dlls/nsiproxy.sys/nsiproxy.so" "$redist/files/lib/wine/aarch64-unix/nsiproxy.so"
 install -m755 "$stage/core/server/wineserver" "$redist/files/bin-arm64/wineserver"
+for arch in aarch64 i386 x86_64; do
+    install -m755 "$stage/core/dlls/iphlpapi/$arch-windows/iphlpapi.dll" \
+        "$redist/files/lib/wine/$arch-windows/iphlpapi.dll"
+done
 # Keep the exact modified source alongside the binary for reproducibility and licenses.
-tar -czf "${output%.tar.gz}-wine-source.tar.gz" -C "$stage" wine android.patch
+tar -czf "${output%.tar.gz}-wine-source.tar.gz" -C "$stage" wine android-patches
 python3 "$repo/tools/package-proton.py" --source "$source_dir" --redist "$redist" \
     --integration-source "$repo/third_party/proton" \
     --wine-source-archive "${output%.tar.gz}-wine-source.tar.gz" --development --output "$output"

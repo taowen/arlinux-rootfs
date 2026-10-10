@@ -40,7 +40,13 @@ def main():
                     'files/lib/wine/aarch64-unix/nsiproxy.so')
     pe_files = tuple(f'files/lib/wine/{arch}-windows/iphlpapi.dll'
                      for arch in ('aarch64', 'i386', 'x86_64'))
-    files = ('proton',) + native_files + pe_files
+    dxvk_files = tuple(f'files/lib/wine/dxvk/{arch}-windows/{module}.dll'
+                      for arch in ('aarch64', 'i386', 'x86_64')
+                      for module in ('dxgi', 'd3d11', 'd3d10core', 'd3d9', 'd3d8'))
+    dxvk_sources = tuple(str(path.relative_to(redist))
+                         for path in sorted((redist/'files/share/arlinux-dxvk').iterdir())
+                         if path.is_file())
+    files = ('proton',) + native_files + pe_files + dxvk_files + dxvk_sources
     manifest = {'format': 1, 'architecture': 'aarch64',
                 'development': args.development,
                 'proton_commit': git(source, 'rev-parse', 'HEAD').decode().strip(),
@@ -52,6 +58,9 @@ def main():
         manifest['wine_source_sha256'] = windows.digest(args.wine_source_archive)
     if args.integration_source:
         manifest['integration_commit'] = git(args.integration_source, 'rev-parse', 'HEAD').decode().strip()
+    dxvk_revision = redist/'files/share/arlinux-dxvk/source-commit'
+    if dxvk_revision.is_file():
+        manifest['dxvk_commit'] = dxvk_revision.read_text().strip()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     # Do not write a manifest into the caller's redist or alter its files.
     with tempfile.TemporaryDirectory(prefix='proton-package-', dir=args.output.parent) as temporary:
@@ -64,7 +73,13 @@ def main():
                 header = binary.read(20)
             if header[:6] != b'\x7fELF\x02\x01' or header[18:20] != b'\xb7\x00':
                 raise ValueError(f'Not an ARM64 Proton redist: {name}')
-        for name, machine in zip(pe_files, (0xaa64, 0x14c, 0x8664)):
+        pe_architectures = dict(zip(pe_files, (0xaa64, 0x14c, 0x8664)))
+        for name in dxvk_files:
+            architecture = name.split('/')[-2]
+            pe_architectures[name] = {'aarch64-windows': 0xa64e,
+                                      'i386-windows': 0x14c,
+                                      'x86_64-windows': 0x8664}[architecture]
+        for name, machine in pe_architectures.items():
             with (redist/name).open('rb') as binary:
                 header = binary.read(64)
                 if header[:2] != b'MZ':

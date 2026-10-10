@@ -24,6 +24,8 @@ fork_revision="$(git -C "$repo/third_party/proton" rev-parse HEAD)"
 for tool in aarch64-linux-gnu-gcc aarch64-w64-mingw32-clang make autoconf bison flex patch; do
     command -v "$tool" >/dev/null || { echo "Missing build tool: $tool" >&2; exit 2; }
 done
+aarch64-w64-mingw32-clang -marm64x -fsyntax-only -x c /dev/null \
+    || { echo 'LLVM-MinGW with ARM64X support (LLVM 23+) is required.' >&2; exit 2; }
 mkdir -p "$repo/build/proton-ge"
 stage="$(mktemp -d "$repo/build/proton-ge/core.XXXXXXXX")"
 echo "Build directory: $stage"
@@ -58,6 +60,15 @@ for arch in aarch64 i386 x86_64; do
     install -m755 "$stage/core/dlls/iphlpapi/$arch-windows/iphlpapi.dll" \
         "$redist/files/lib/wine/$arch-windows/iphlpapi.dll"
 done
+# GE's DXVK 3.x requires storageBuffer8BitAccess, unavailable on Adreno 6xx.
+# Keep the Windows-app runtime GPU accelerated with one Vulkan 1.3 baseline.
+bash "$repo/tools/build/dxvk-windows.sh" "$3" "$stage/dxvk"
+for arch in aarch64 i386 x86_64; do
+    cp "$stage/dxvk/$arch-windows/"*.dll "$redist/files/lib/wine/dxvk/$arch-windows/"
+done
+mkdir -p "$redist/files/share/arlinux-dxvk"
+cp "$stage/dxvk/source-commit" "$stage/dxvk/source.tar.gz" \
+    "$stage/dxvk/"*.patch "$redist/files/share/arlinux-dxvk/"
 # Keep the exact modified source alongside the binary for reproducibility and licenses.
 tar -czf "${output%.tar.gz}-wine-source.tar.gz" -C "$stage" wine android-patches
 python3 "$repo/tools/package-proton.py" --source "$source_dir" --redist "$redist" \

@@ -49,10 +49,11 @@ mkdir "$stage/tools" "$stage/core"
 # Keep GE's ARM64EC/ARM64X builtins usable by both native ARM64 and x64 clients.
 core_modules=()
 for arch in aarch64 i386 x86_64; do
-    for module in ntdll kernel32 kernelbase windows.ui; do
+    for module in ntdll kernel32 kernelbase windows.ui netprofm; do
         core_modules+=("dlls/$module/$arch-windows/$module.dll")
     done
 done
+core_modules+=(dlls/wow64/aarch64-windows/wow64.dll dlls/wow64/x86_64-windows/wow64.dll)
 (cd "$stage/core" && "$stage/wine/configure" --host=aarch64-linux-gnu --enable-win64 \
     --enable-archs=arm64ec,aarch64,i386,x86_64 \
     --with-wine-tools="$stage/tools" --disable-tests --without-x --without-wayland \
@@ -72,13 +73,17 @@ for arch in aarch64 i386 x86_64; do
         "$redist/files/lib/wine/$arch-windows/iphlpapi.dll"
 done
 for arch in aarch64 i386 x86_64; do
-    for module in ntdll kernel32 kernelbase windows.ui; do
+    for module in ntdll kernel32 kernelbase windows.ui netprofm; do
         install -m755 "$stage/core/dlls/$module/$arch-windows/$module.dll" \
             "$redist/files/lib/wine/$arch-windows/$module.dll"
     done
 done
-# GE's DXVK 3.x requires storageBuffer8BitAccess, unavailable on Adreno 6xx.
+for arch in aarch64 x86_64; do
+    install -m755 "$stage/core/dlls/wow64/$arch-windows/wow64.dll" \
+        "$redist/files/lib/wine/$arch-windows/wow64.dll"
+done
 # Keep the Windows-app runtime GPU accelerated with one Vulkan 1.3 baseline.
+# GE's DXVK 3.x requires storageBuffer8BitAccess, unavailable on Adreno 6xx.
 bash "$repo/tools/build/dxvk-windows.sh" "$3" "$stage/dxvk"
 for arch in aarch64 i386 x86_64; do
     cp "$stage/dxvk/$arch-windows/"*.dll "$redist/files/lib/wine/dxvk/$arch-windows/"

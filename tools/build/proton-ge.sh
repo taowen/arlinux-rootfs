@@ -14,7 +14,12 @@ export PATH="$(realpath "$3"):$PATH"
 output="$(realpath -m "$4")"
 version=GE-Proton11-7
 expected=741cf70256f13b20d44952b590defd68b115814097f911c9ec053a64d33795267e2a982a5ce939407e8b649613eb3943bb2e2ebf4794d302ff96b83b61457cdd
-[[ "$(git -C "$source_dir" describe --exact-match --tags HEAD)" == "$version" ]]
+source_revision="$(git -C "$source_dir" rev-parse HEAD)"
+fork_revision="$(git -C "$repo/third_party/proton" rev-parse HEAD)"
+[[ "$source_revision" == c191f35dcebbeccfacd3b4c6f6eea026e588c1c2 || "$source_revision" == "$fork_revision" ]] \
+    || { echo 'Use the pinned GE upstream revision or the pinned ARLinux fork.' >&2; exit 2; }
+[[ "$(git -C "$source_dir/wine" rev-parse HEAD)" == 46b29104e3741fe23bf5e2547196a253aab88c89 ]] \
+    || { echo 'Wine source does not match the GE ARM64 archive.' >&2; exit 2; }
 [[ "$(sha512sum "$base" | cut -d' ' -f1)" == "$expected" ]] || { echo 'Wrong GE archive SHA-512' >&2; exit 1; }
 for tool in aarch64-linux-gnu-gcc aarch64-w64-mingw32-clang make autoconf bison flex patch; do
     command -v "$tool" >/dev/null || { echo "Missing build tool: $tool" >&2; exit 2; }

@@ -63,6 +63,24 @@ In a running ARM64 desktop, `arlinux-steam` downloads and starts Valve's native
 Steam client. It is not bundled; see [runtime tools](docs/RUNTIME-PROTOCOL.md#native-steam-client)
 for installation requirements and limits.
 
+`arlinux-windows` runs standalone Windows executables using a separately
+installed ARM64 GE-Proton bundle. It is not preinstalled and does not change
+Steam's compatibility tools or game prefixes:
+
+```bash
+arlinux-windows /path/to/application.exe
+```
+
+Each executable gets its own Proton data directory. Use `--prefix DIRECTORY`
+before the executable to share a prefix with an installer or another executable.
+The first launch downloads the pinned ARM64 runtime from the
+[ARLinux GE-Proton fork](https://github.com/taowen/proton-ge-custom/releases)
+and verifies its SHA-256. Later launches work offline. To install a manually
+downloaded bundle, use `arlinux-windows --install runtime.tar.gz --sha256 SHA256`.
+Windows application support is experimental. `tools/build/proton-ge.sh` packages the pinned GE binary archive with
+an Android Wine core rebuilt from the **matching, upstream-prepared GE source**;
+it also produces that modified Wine source archive. No FEX code is modified.
+
 To develop an Android app **inside** a running Debian/Yibu instance, start with
 the [Geany + Kotlin/Gradle project](examples/android-gradle/README.md), or the
 smaller [Java example](examples/android-dev/README.md). Both build natively on

@@ -49,7 +49,7 @@ mkdir "$stage/tools" "$stage/core"
 # Keep GE's ARM64EC/ARM64X builtins usable by both native ARM64 and x64 clients.
 core_modules=()
 for arch in aarch64 i386 x86_64; do
-    for module in ntdll kernel32 kernelbase windows.ui netprofm dxcore ucrtbase; do
+    for module in ntdll kernel32 kernelbase windows.ui netprofm dxcore ucrtbase gdiplus; do
         core_modules+=("dlls/$module/$arch-windows/$module.dll")
     done
 done
@@ -73,7 +73,7 @@ for arch in aarch64 i386 x86_64; do
         "$redist/files/lib/wine/$arch-windows/iphlpapi.dll"
 done
 for arch in aarch64 i386 x86_64; do
-    for module in ntdll kernel32 kernelbase windows.ui netprofm dxcore ucrtbase; do
+    for module in ntdll kernel32 kernelbase windows.ui netprofm dxcore ucrtbase gdiplus; do
         install -m755 "$stage/core/dlls/$module/$arch-windows/$module.dll" \
             "$redist/files/lib/wine/$arch-windows/$module.dll"
     done

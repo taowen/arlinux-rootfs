@@ -90,10 +90,10 @@ def ranked_sources(urls):
 
     def probe(url):
         try:
-            result = subprocess.run(['curl', *CURL_TLS, '-fsSL', '--connect-timeout', '2', '--max-time', '4',
-                '--range', '0-262143', '--output', '/dev/null', '--write-out',
+            result = subprocess.run(['curl', *CURL_TLS, '-fsSL', '--connect-timeout', '2', '--max-time', '12',
+                '--range', '0-1048575', '--output', '/dev/null', '--write-out',
                 '%{http_code} %{size_download} %{speed_download}', url],
-                capture_output=True, text=True, timeout=5)
+                capture_output=True, text=True, timeout=14)
             status, size, speed = result.stdout.strip().split()
             # curl 28 is expected if a server ignores Range and streams the whole file.
             if result.returncode in (0, 28) and status in ('200', '206') and float(size) >= 16384:

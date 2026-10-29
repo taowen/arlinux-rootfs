@@ -93,7 +93,7 @@ input_id() {
                 | sort -z | xargs -0 -r sha256sum)
         git -C "distributions/$product" submodule status --recursive || true
         printf '%s\n' "$gpu_inputs"
-        sha256sum build/artifacts/capture/capture.zip
+        sha256sum build/artifacts/capture/capture.zip build/linux/ibus.outputs.json
         true
     } | sha256sum | cut -d' ' -f1
 }
@@ -169,6 +169,7 @@ missing = [path for path in product['requiredFiles']
 if missing:
     raise SystemExit('rootfs seed is missing required files: ' + ', '.join(missing))
 PY
+    cp -a build/linux/ibus/. "$rootfs/"
     mkdir -p "$rootfs/usr/lib/arlinux/guest"
     python3 tools/build/install-capture.py build/artifacts/capture "$rootfs/usr/lib/arlinux/gfxreconstruct"
     install -Dm755 "build/linux/runtime/$product/bwrap" "$rootfs/usr/local/bin/bwrap"

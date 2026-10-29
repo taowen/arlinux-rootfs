@@ -1,0 +1,9 @@
+{
+  "repository": "taowen/arlinux-rootfs",
+  "runner": "ubuntu-24.04-arm",
+  "dependencies": [],
+  "product": "input",
+  "compilerCacheMiB": 512,
+  "release": "arlinux-linux-ibus-debug",
+  "products": []
+}

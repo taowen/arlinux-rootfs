@@ -272,6 +272,12 @@ QT_IM_MODULE=ibus
 XMODIFIERS=@im=ibus
 ```
 
+Native Wayland clients use the independently built upstream adapter at
+`/usr/lib/arlinux/ibus/libexec/ibus-ui-gtk3`. It connects to the same IBus daemon
+and hosted engine. With `use-system-keyboard-layout=true`, unhandled physical
+keys remain key events; Android composition remains text input. Build ownership
+and the pinned upstream version are defined in [the build guide](BUILD.md#wayland-input-adapter).
+
 Before desktop applications start, the session calls
 `org.freedesktop.DBus.Peer.Ping` on destination `org.arlinux.HostedInput`, path
 `/org/arlinux/HostedInput`. D-Bus activation starts IBus and publishes

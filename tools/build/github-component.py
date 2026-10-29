@@ -81,7 +81,13 @@ def prepare(data, framework):
         'libxcb-xfixes0-dev', 'libxcb-randr0-dev', 'libxdamage-dev', 'libxext-dev',
         'libelf-dev', 'libudev-dev', 'libgbm-dev', 'gperf', 'libglib2.0-dev', 'libglib2.0-dev-bin',
         'ccache', 'gettext', 'libgettextpo-dev', 'libssl-dev', 'unzip', 'autopoint', 'intltool', 'python-is-python3']
-    if data['stage'] == 'guest-tools':
+    if data['stage'] == 'linux-ibus':
+        packages = ['build-essential', 'git', 'python3', 'python3-venv', 'ccache', 'pkg-config',
+                    'libglib2.0-dev', 'libgtk-3-dev', 'libdbus-1-dev', 'libdconf-dev',
+                    'libwayland-dev', 'libxkbcommon-dev', 'wayland-protocols', 'valac',
+                    'gobject-introspection', 'libgirepository1.0-dev', 'gettext', 'zstd', 'patchelf',
+                    'iso-codes', 'python3-gi']
+    elif data['stage'] == 'guest-tools':
         packages = ['python3', 'python3-venv', 'git', 'zstd', 'ccache']
     elif data['stage'] == 'vulkan-capture':
         # The native capture product does not compile Mesa/libhybris or prepare
@@ -96,7 +102,7 @@ def prepare(data, framework):
         env=dict(os.environ, DEBIAN_FRONTEND='noninteractive'))
     run('python3', '-m', 'venv', root / 'python')
     python_packages = ['zstandard==0.25.0']
-    if data['stage'] not in ('vulkan-capture', 'guest-tools'):
+    if data['stage'] not in ('vulkan-capture', 'guest-tools', 'linux-ibus'):
         python_packages += ['meson==1.12.0', 'mako==1.3.10', 'packaging==25.0', 'PyYAML==6.0.2']
     run(root / 'python/bin/pip', 'install', *python_packages)
     bin_dir = root / 'bin'
@@ -104,8 +110,8 @@ def prepare(data, framework):
     cross = bin_dir / 'aarch64-linux-gnu-pkg-config'
     cross.write_text('#!/bin/sh\nexport PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig\nexec pkg-config "$@"\n')
     cross.chmod(0o755)
-    if data['stage'] == 'guest-tools':
-        pass  # First-party scripts and resources require no submodules.
+    if data['stage'] in ('guest-tools', 'linux-ibus'):
+        pass  # These recipes require no submodules.
     elif data['stage'] == 'vulkan-capture':
         run('git', '-C', framework, 'submodule', 'update', '--init', '--depth', '1',
             'third_party/gfxreconstruct', 'third_party/libhybris')
@@ -214,7 +220,10 @@ def build(data, framework):
     for dependency in data['dependencies']:
         import_dependency(root, dependency, visited)
     config = root / 'product.json'
-    if stage == 'guest-tools':
+    if stage == 'linux-ibus':
+        run('bash', framework/'build.sh', 'input',
+            env=dict(os.environ, CCACHE_DIR=str(root/'cache/ccache'), CCACHE_BASEDIR=str(framework)))
+    elif stage == 'guest-tools':
         run('bash', framework/'build.sh', 'guest-tools')
     elif stage == 'vulkan-capture':
         run('bash', framework/'build.sh', 'capture',

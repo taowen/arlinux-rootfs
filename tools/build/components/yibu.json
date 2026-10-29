@@ -4,7 +4,8 @@
   "dependencies": [
     "linux-mesa",
     "linux-hybris",
-    "vulkan-capture"
+    "vulkan-capture",
+    "linux-ibus"
   ],
   "product": "rootfs",
   "compilerCacheMiB": 2048,

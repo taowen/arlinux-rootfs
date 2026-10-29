@@ -10,6 +10,9 @@ def source_inputs(repo, revision, stage, plan):
         paths = ('build.sh', 'tools/build/github-component.py', 'tools/build/component_inputs.py',
                  'tools/build/guest-tools.py', 'tools/build/pipeline_cache.py', 'runtime/tools',
                  'tools/arlinux-app-data/hosted-ime.py')
+    elif stage == 'linux-ibus':
+        paths = ('build.sh', 'tools/build/github-component.py', 'tools/build/component_inputs.py',
+                 'tools/build/ibus-component.py', 'tools/build/pipeline_cache.py')
     elif stage == 'vulkan-capture':
         paths = ('build.sh', 'tools/build/github-component.py', 'tools/build/component_inputs.py',
                  'tools/build/vulkan-capture-component.py', 'tools/build/pipeline_cache.py',

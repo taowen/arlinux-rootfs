@@ -9,6 +9,21 @@ integration branch, shared with Wine. Keep the two consumers pinned to the same
 commit. Linux glibc and Android Bionic retain independent build modes and
 artifacts; see the [component ownership guide](https://github.com/taowen/libhybris/blob/arlinux/arlinux/BUILD.md).
 
+## Wayland input adapter
+
+The `linux-ibus` component builds the checksum-pinned, unmodified upstream IBus
+release in `tools/build/ibus-component.py` on the ARM64 runner. All distributions
+consume its verified runtime tree as a rootfs dependency. The adapter and its
+matching client library live under `/usr/lib/arlinux/ibus`; distribution-owned
+IBus daemons, toolkit modules and Python GI bindings remain in place. Source and
+output hashes govern its independent cache and component capsule.
+
+The session uses this adapter with the hosted engine and the system keyboard
+layout. Older IBus Wayland adapters commit unhandled printable keys as text,
+which prevents games from receiving physical movement keys. The upstream adapter
+also implements forwarding synthesized key events through input-method-v2.
+Do not bypass this by disabling input methods for individual applications.
+
 ## ARLinux Guest Tools
 
 First-party application integration is a separate `guest-tools` product, not part

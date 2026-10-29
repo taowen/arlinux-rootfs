@@ -12,7 +12,7 @@ from artifact_download import download
 from pipeline_cache import Cache, digest, inventory
 
 VERSION = '1.5.35-rc1'
-SOURCE_SHA256 = '3963bfe45bfb73ff967cf3ae2542a4f479e6dd9506304a57b9d844d1ae2f49cb'
+SOURCE_SHA256 = 'd4fe3751b6fc496471af74fe618a9c96ae3d71a08574cccb00eb1984d489ec2b'
 PREFIX = '/usr/lib/arlinux/ibus'
 
 
@@ -36,13 +36,11 @@ def main():
         if work.exists():
             shutil.rmtree(work)
         work.mkdir(parents=True)
-        archive = download(f'https://github.com/ibus/ibus/releases/download/{VERSION}/ibus-{VERSION}.tar.xz',
-                           work/'source.tar.xz', SOURCE_SHA256)
+        archive = download(f'https://github.com/ibus/ibus/releases/download/{VERSION}/ibus-{VERSION}.tar.gz',
+                           work/'source.tar.gz', SOURCE_SHA256)
         with tarfile.open(archive) as source:
             source.extractall(work, filter='data')
         source = work/f'ibus-{VERSION}'
-        run('gtkdocize', '--copy', cwd=source)
-        run('autoreconf', '-fi', cwd=source)
         build_dir = work/'build'
         build_dir.mkdir()
         env = dict(os.environ, CC='ccache cc', CXX='ccache c++')

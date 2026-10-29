@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=WeChat
+Name[zh]=微信
+Name[zh_CN]=微信
+Comment=Download and install WeChat on first use, then launch it
+Comment[zh_CN]=首次点击下载安装微信，之后直接启动
+TryExec=/usr/bin/apt-get
+Exec=arlinux-popular-app wechat %U
+Icon=/usr/share/pixmaps/arlinux-wechat.png
+Terminal=true
+Categories=Network;InstantMessaging;
+StartupNotify=false

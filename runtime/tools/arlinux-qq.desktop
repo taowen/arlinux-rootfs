@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=QQ
+Comment=Download and install QQ on first use, then launch it
+Comment[zh_CN]=首次点击下载安装 QQ，之后直接启动
+TryExec=/usr/bin/apt-get
+Exec=arlinux-popular-app qq %U
+Icon=/usr/share/pixmaps/arlinux-qq.png
+Terminal=true
+Categories=Network;InstantMessaging;
+StartupWMClass=QQ
+StartupNotify=false

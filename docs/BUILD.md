@@ -53,6 +53,22 @@ merged. Vendor bottle registries, Linux Wine DLL patches, dynamic launch scripts
 and packages requiring a vendor setup program are not supported. Static DLL
 overrides apply only to that application's launch.
 
+Guest Tools provides QQ and WeChat entries for ARM64 Debian-family guests.
+First launch downloads the official DEB mirrored in the fixed
+[`popular-apps` release](https://github.com/taowen/arlinux-rootfs/releases/tag/popular-apps),
+verifies GitHub's SHA-256 asset digest, and installs it and its dependencies with
+APT. Installed applications launch offline without checking for updates.
+Keep the asset names `qq-arm64.deb` and `wechat-arm64.deb` when replacing installers;
+the launcher reads the current digest from the release rather than pinning a
+version in Guest Tools. Upload official ARM64 packages without repacking them:
+
+```powershell
+gh release upload popular-apps qq-arm64.deb wechat-arm64.deb --clobber --repo taowen/arlinux-rootfs
+```
+
+The bundled QQ and WeChat icons come from those official packages. Tencent owns
+the applications and icons; their vendor licenses and first-run agreements apply.
+
 Guest Tools supplies one File Manager entry on every distribution. It opens the
 user's existing `inode/directory` MIME default without changing that association.
 Without a configured default it uses the desktop's paired manager: Dolphin on

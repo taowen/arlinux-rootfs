@@ -53,10 +53,18 @@ def main():
             '--disable-libnotify', '--disable-emoji-dict', '--disable-unicode-dict',
             '--disable-tests', '--disable-install-tests', '--disable-gtk-doc',
             '--disable-systemd-services', '--enable-wayland', cwd=build_dir, env=env)
-        run('make', '-j4', cwd=build_dir, env=env)
+        # Regenerate Vala output for this configuration, as requested by the
+        # upstream configure script when XIM/appindicator/emoji are disabled.
+        run('make', '-C', build_dir/'ui/gtk3', 'maintainer-clean-generic', env=env)
+        # Build the adapter's dependency graph, not another daemon or portal.
+        # The release's generated portal targets a newer GLib than this runner.
+        directories = ('src', 'bindings/vala', 'client/wayland', 'ui/gtk3', 'data', 'po')
+        for directory in directories:
+            run('make', '-C', build_dir/directory, '-j4', env=env)
         if prefix.exists():
             shutil.rmtree(prefix)
-        run('make', 'install', 'DESTDIR='+str(prefix), cwd=build_dir, env=env)
+        for directory in directories:
+            run('make', '-C', build_dir/directory, 'install', 'DESTDIR='+str(prefix), env=env)
         # Keep the updated adapter and its ABI-matched IBus client library in
         # a private prefix. Distribution-owned daemon/GI/GTK modules stay intact.
         # The adapter uses the existing session bus and hosted input engine.

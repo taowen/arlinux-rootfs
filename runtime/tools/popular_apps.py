@@ -20,9 +20,9 @@ class Application:
     package: str
     binary: str
     desktop: str
-    flags: tuple = ()
-    dependencies: tuple = ()
-    environment: dict = field(default_factory=dict)
+    flags: tuple[str, ...] = ()
+    dependencies: tuple[str, ...] = ()
+    environment: dict[str, str] = field(default_factory=dict)
 
 
 APPS = {
@@ -35,7 +35,7 @@ APPS = {
 }
 
 
-def installed(app):
+def installed(app: Application) -> bool:
     packages = (app.package, *app.dependencies)
     status = subprocess.run(['dpkg-query', '-W', '-f=${db:Status-Status}\n', *packages],
                             capture_output=True, text=True)
@@ -43,7 +43,7 @@ def installed(app):
             and os.access(app.binary, os.X_OK))
 
 
-def install(name, app):
+def install(name: str, app: Application) -> None:
     asset_name = name + '-arm64.deb'
     checksums = shared.github_metadata(DOWNLOAD + 'SHA256SUMS').decode('ascii')
     matches = re.findall(r'^([0-9a-f]{64})  ' + re.escape(asset_name) + r'$', checksums, re.MULTILINE)
@@ -59,7 +59,7 @@ def install(name, app):
                    check=True, env=env)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('application', choices=APPS)
     parser.add_argument('arguments', nargs='*')
@@ -74,8 +74,8 @@ def main():
         if not installed(app):
             print(f'Installing {args.application}…', flush=True)
             install(args.application, app)
-        if not installed(app):
-            raise RuntimeError('Application installation did not complete')
+            if not installed(app):
+                raise RuntimeError('Application installation did not complete')
     # Keep the on-demand entry as the single Apps entry after APT installs the
     # vendor shortcut. Preserve any existing user override.
     applications = Path(os.environ.get('XDG_DATA_HOME', Path.home()/'.local/share'))/'applications'

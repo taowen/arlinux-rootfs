@@ -57,7 +57,8 @@ Guest Tools provides QQ and WeChat entries for ARM64 Debian-family guests.
 First launch downloads the official DEB mirrored in the fixed
 [`popular-apps` release](https://github.com/taowen/arlinux-rootfs/releases/tag/popular-apps),
 verifies the release's `SHA256SUMS`, and installs it and its dependencies with
-APT. Installed applications launch offline without checking for updates.
+APT. Subsequent launches skip installer downloads and APT; each application's
+own online features still require networking.
 WeChat also installs its undeclared NSS dependency. Applications select their
 native display backend from the desktop session environment. WeChat uses its
 native Qt surface size because its bundled Qt paints incorrectly at HiDPI scale.

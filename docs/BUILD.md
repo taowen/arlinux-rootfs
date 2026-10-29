@@ -42,6 +42,17 @@ virtual-root privileges; later launches do not reinstall it. This is not a
 PackageKit/Flatpak service or a replacement for Spark Store. Arch-family guests
 have neither this Debian entry nor the Android-generated Spark Store entry.
 
+Spark's portable Windows packages use `arlinux-spark-wine` from Guest Tools.
+Android verifies the catalog download, then the importer reads the package's
+static `EXEC_PATH`, imports its application tree under Program Files into the
+single instance Bionic Wine prefix, and records its own installation receipt and
+desktop entry. These imports are not DPKG installations. Removal deletes the
+owned application tree and entry, never the shared Wine prefix. Existing
+application directories owned by another installer are rejected rather than
+merged. Vendor bottle registries, Linux Wine DLL patches, dynamic launch scripts
+and packages requiring a vendor setup program are not supported. Static DLL
+overrides apply only to that application's launch.
+
 Guest Tools supplies one File Manager entry on every distribution. It opens the
 user's existing `inode/directory` MIME default without changing that association.
 Without a configured default it uses the desktop's paired manager: Dolphin on

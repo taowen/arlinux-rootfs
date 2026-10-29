@@ -428,13 +428,15 @@ def dos_path(path):
     return translated
 
 
-def launch(executable, arguments=(), prefix=None):
+def launch(executable, arguments=(), prefix=None, dll_overrides=''):
     executable = executable.resolve(strict=True)
     root = ensure_runtime()
     if prefix is not None and prefix.resolve() != instance_prefix().resolve():
         raise ValueError('Bionic Wine uses one instance prefix')
     prefix = instance_prefix()
     env = environment(root, prefix)
+    if dll_overrides:
+        env['WINEDLLOVERRIDES'] = dll_overrides
     import windows_a11y
     initialize(root, prefix, env)
     import windows_webview
@@ -448,12 +450,13 @@ def launch(executable, arguments=(), prefix=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--prefix', type=Path, help='Wine data directory (contains pfx)')
+    parser.add_argument('--dll-overrides', default='', help='DLL overrides for this application process')
     parser.add_argument('executable', nargs='?', type=Path)
     parser.add_argument('arguments', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     if not args.executable:
         parser.error('Provide a Windows executable')
-    return launch(args.executable, args.arguments, args.prefix)
+    return launch(args.executable, args.arguments, args.prefix, args.dll_overrides)
 
 
 if __name__ == '__main__':

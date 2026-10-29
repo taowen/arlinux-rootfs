@@ -41,8 +41,7 @@ def main():
         with tarfile.open(archive) as source:
             source.extractall(work, filter='data')
         source = work/f'ibus-{VERSION}'
-        build_dir = work/'build'
-        build_dir.mkdir()
+        build_dir = source
         env = dict(os.environ, CC='ccache cc', CXX='ccache c++')
         run(source/'configure', '--prefix='+PREFIX, '--libdir='+PREFIX+'/lib',
             '--disable-gtk2', '--disable-gtk4', '--disable-xim', '--disable-engine',

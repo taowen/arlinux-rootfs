@@ -46,7 +46,9 @@ def installed(app: Application) -> bool:
 def install(name: str, app: Application) -> None:
     asset_name = name + '-arm64.deb'
     checksums = shared.github_metadata(DOWNLOAD + 'SHA256SUMS').decode('ascii')
-    matches = re.findall(r'^([0-9a-f]{64})  ' + re.escape(asset_name) + r'$', checksums, re.MULTILINE)
+    pattern = re.compile(r'([0-9a-f]{64})  ' + re.escape(asset_name))
+    matches = [match.group(1) for line in checksums.splitlines()
+               if (match := pattern.fullmatch(line)) is not None]
     if len(matches) != 1:
         raise ValueError(f'Missing or ambiguous installer checksum: {asset_name}')
     installer = shared.download(DOWNLOAD + asset_name, matches[0], '.deb')

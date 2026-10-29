@@ -468,10 +468,15 @@ def launch(root, arguments):
         return 0
     arguments = system_language_arguments(arguments)
     arguments = ['-noipv6', *[arg for arg in arguments if arg != '-noipv6']]
-    # Valve's nonfatal assertion path can leave its UI stopped while Breakpad
-    # collects a dump under Android. Keep assertion logging without entering
-    # that debugger path; callers can override this Valve-supported setting.
-    os.environ.setdefault('DONT_BREAK_ON_ASSERT', '1')
+    # The ARM64 client requires CefCrashReportingEnabled(), but its package does
+    # not supply CEF's configuration. Enable local crash reports using CEF's
+    # supported file; omitting ServerURL keeps reports on the device. Preserve
+    # any vendor/user configuration instead of suppressing Valve assertions.
+    try:
+        with (binary.parent/'crash_reporter.cfg').open('x') as config:
+            config.write('[Config]\nProductName=Steam\n')
+    except FileExistsError:
+        pass
     ensure_dependencies()
     if Path('/etc/ld.so.conf.d/00-arlinux-graphics.conf').is_file():
         subprocess.run(['sudo', 'ldconfig'], check=True)

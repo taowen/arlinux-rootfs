@@ -86,7 +86,7 @@ def prepare(data, framework):
                     'libglib2.0-dev', 'libgtk-3-dev', 'libdbus-1-dev', 'libdconf-dev',
                     'libwayland-dev', 'libxkbcommon-dev', 'wayland-protocols', 'valac',
                     'gobject-introspection', 'libgirepository1.0-dev', 'gettext', 'zstd', 'patchelf',
-                    'iso-codes', 'python3-gi']
+                    'iso-codes', 'python3-gi', 'autoconf', 'automake', 'libtool', 'autopoint', 'gtk-doc-tools']
     elif data['stage'] == 'guest-tools':
         packages = ['python3', 'python3-venv', 'git', 'zstd', 'ccache']
     elif data['stage'] == 'vulkan-capture':

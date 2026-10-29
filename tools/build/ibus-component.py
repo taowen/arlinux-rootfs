@@ -41,6 +41,8 @@ def main():
         with tarfile.open(archive) as source:
             source.extractall(work, filter='data')
         source = work/f'ibus-{VERSION}'
+        run('gtkdocize', '--copy', cwd=source)
+        run('autoreconf', '-fi', cwd=source)
         build_dir = work/'build'
         build_dir.mkdir()
         env = dict(os.environ, CC='ccache cc', CXX='ccache c++')

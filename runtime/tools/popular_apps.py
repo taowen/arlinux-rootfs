@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Install repository-hosted official ARM64 DEBs on first use, then launch them."""
 import argparse
-import json
 import os
 from pathlib import Path
 import re
@@ -12,7 +11,6 @@ import sys
 import desktop_bus
 import shared
 
-RELEASE = 'https://api.github.com/repos/taowen/arlinux-rootfs/releases/tags/popular-apps'
 DOWNLOAD = 'https://github.com/taowen/arlinux-rootfs/releases/download/popular-apps/'
 APPS = {
     'qq': ('linuxqq', '/opt/QQ/qq', 'qq.desktop', ['--force-renderer-accessibility']),
@@ -28,14 +26,11 @@ def installed(package, binary):
 
 def install(name, package):
     asset_name = name + '-arm64.deb'
-    release = json.loads(shared.github_metadata(RELEASE))
-    asset = next((item for item in release['assets'] if item['name'] == asset_name), None)
-    if asset is None:
-        raise RuntimeError(f'Installer unavailable: {asset_name}')
-    digest = asset.get('digest', '')
-    if not re.fullmatch(r'sha256:[0-9a-f]{64}', digest) or asset['browser_download_url'] != DOWNLOAD + asset_name:
-        raise ValueError('Invalid Linux application download metadata')
-    installer = shared.download(DOWNLOAD + asset_name, digest.removeprefix('sha256:'), '.deb')
+    checksums = shared.github_metadata(DOWNLOAD + 'SHA256SUMS').decode('ascii')
+    matches = re.findall(r'^([0-9a-f]{64})  ' + re.escape(asset_name) + r'$', checksums, re.MULTILINE)
+    if len(matches) != 1:
+        raise ValueError(f'Missing or ambiguous installer checksum: {asset_name}')
+    installer = shared.download(DOWNLOAD + asset_name, matches[0], '.deb')
     fields = subprocess.check_output(['dpkg-deb', '-f', str(installer), 'Package', 'Architecture'], text=True)
     if fields.splitlines() != [f'Package: {package}', 'Architecture: arm64']:
         raise ValueError('Installer package or architecture does not match the application')

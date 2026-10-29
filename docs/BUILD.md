@@ -56,15 +56,22 @@ overrides apply only to that application's launch.
 Guest Tools provides QQ and WeChat entries for ARM64 Debian-family guests.
 First launch downloads the official DEB mirrored in the fixed
 [`popular-apps` release](https://github.com/taowen/arlinux-rootfs/releases/tag/popular-apps),
-verifies GitHub's SHA-256 asset digest, and installs it and its dependencies with
+verifies the release's `SHA256SUMS`, and installs it and its dependencies with
 APT. Installed applications launch offline without checking for updates.
 Keep the asset names `qq-arm64.deb` and `wechat-arm64.deb` when replacing installers;
 the launcher reads the current digest from the release rather than pinning a
 version in Guest Tools. Upload official ARM64 packages without repacking them:
 
 ```powershell
-gh release upload popular-apps qq-arm64.deb wechat-arm64.deb --clobber --repo taowen/arlinux-rootfs
+$sums = 'qq-arm64.deb', 'wechat-arm64.deb' | ForEach-Object { "$( (Get-FileHash $_ -Algorithm SHA256).Hash.ToLowerInvariant() )  $_" }
+[IO.File]::WriteAllText((Join-Path $PWD 'SHA256SUMS'), ($sums -join "`n") + "`n")
+gh release upload popular-apps qq-arm64.deb wechat-arm64.deb SHA256SUMS --clobber --repo taowen/arlinux-rootfs
 ```
+
+Upload the new installers before their updated checksums. A client racing an
+update rejects a mismatched download and can retry; it never skips verification.
+The checksum file uses an ordinary release download, avoiding anonymous API
+rate limits during installation.
 
 The bundled QQ and WeChat icons come from those official packages. Tencent owns
 the applications and icons; their vendor licenses and first-run agreements apply.

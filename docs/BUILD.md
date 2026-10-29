@@ -58,6 +58,8 @@ First launch downloads the official DEB mirrored in the fixed
 [`popular-apps` release](https://github.com/taowen/arlinux-rootfs/releases/tag/popular-apps),
 verifies the release's `SHA256SUMS`, and installs it and its dependencies with
 APT. Installed applications launch offline without checking for updates.
+WeChat installs its undeclared NSS dependency and uses Qt's X11 backend;
+its native Wayland web helper is currently incompatible with the guest.
 Keep the asset names `qq-arm64.deb` and `wechat-arm64.deb` when replacing installers;
 the launcher reads the current digest from the release rather than pinning a
 version in Guest Tools. Upload official ARM64 packages without repacking them:
@@ -65,7 +67,8 @@ version in Guest Tools. Upload official ARM64 packages without repacking them:
 ```powershell
 $sums = 'qq-arm64.deb', 'wechat-arm64.deb' | ForEach-Object { "$( (Get-FileHash $_ -Algorithm SHA256).Hash.ToLowerInvariant() )  $_" }
 [IO.File]::WriteAllText((Join-Path $PWD 'SHA256SUMS'), ($sums -join "`n") + "`n")
-gh release upload popular-apps qq-arm64.deb wechat-arm64.deb SHA256SUMS --clobber --repo taowen/arlinux-rootfs
+gh release upload popular-apps qq-arm64.deb wechat-arm64.deb --clobber --repo taowen/arlinux-rootfs
+gh release upload popular-apps SHA256SUMS --clobber --repo taowen/arlinux-rootfs
 ```
 
 Upload the new installers before their updated checksums. A client racing an

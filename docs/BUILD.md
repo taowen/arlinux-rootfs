@@ -58,8 +58,8 @@ First launch downloads the official DEB mirrored in the fixed
 [`popular-apps` release](https://github.com/taowen/arlinux-rootfs/releases/tag/popular-apps),
 verifies the release's `SHA256SUMS`, and installs it and its dependencies with
 APT. Installed applications launch offline without checking for updates.
-WeChat installs its undeclared NSS dependency and uses Qt's X11 backend;
-its native Wayland web helper is currently incompatible with the guest.
+WeChat also installs its undeclared NSS dependency. Applications select their
+native display backend from the desktop session environment.
 Keep the asset names `qq-arm64.deb` and `wechat-arm64.deb` when replacing installers;
 the launcher reads the current digest from the release rather than pinning a
 version in Guest Tools. Upload official ARM64 packages without repacking them:

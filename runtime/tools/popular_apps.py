@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Install repository-hosted official ARM64 DEBs on first use, then launch them."""
 import argparse
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import os
 from pathlib import Path
 import re
@@ -22,15 +22,13 @@ class Application:
     desktop: str
     flags: tuple = ()
     dependencies: tuple = ()
-    environment: dict = field(default_factory=dict)
 
 
 APPS = {
     'qq': Application('linuxqq', '/opt/QQ/qq', 'qq.desktop', flags=('--force-renderer-accessibility',)),
-    # The vendor DEB omits NSS. Its native Wayland web helper also crashes;
-    # use the supported X11 backend for both Qt and the helper it launches.
+    # The vendor DEB does not declare its NSS dependency.
     'wechat': Application('wechat', '/usr/bin/wechat', 'wechat.desktop',
-                          dependencies=('libnss3',), environment={'QT_QPA_PLATFORM': 'xcb'}),
+                          dependencies=('libnss3',)),
 }
 
 
@@ -85,7 +83,6 @@ def main():
     except FileExistsError:
         pass
     env = desktop_bus.environment(os.environ)
-    env.update(app.environment)
     with (cache/(args.application + '.log')).open('ab') as log:
         subprocess.Popen([app.binary, *app.flags, *args.arguments], env=env,
                          stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,

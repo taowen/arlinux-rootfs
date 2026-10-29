@@ -64,7 +64,9 @@ def installed():
 
 
 def assignment(script, name, required=True):
-    values = []
+    # Spark's packaging metadata declares initial literal values. Later
+    # installer branches can reassign them; that vendor control flow is never
+    # executed by the portable importer.
     for line in script.splitlines():
         match = re.fullmatch(r'\s*(?:export\s+)?'+name+r'=(.*)', line)
         if match is None:
@@ -74,10 +76,13 @@ def assignment(script, name, required=True):
         parts = shlex.split(match[1], comments=True)
         if len(parts) > 1:
             raise ValueError('Invalid Spark launcher setting: '+name)
-        values.append(parts[0] if parts else '')
-    if len(set(values)) > 1 or (required and (not values or not values[0])):
-        raise ValueError('Expected one static Spark launcher setting: '+name)
-    return values[0] if values else ''
+        value = parts[0] if parts else ''
+        if required and not value:
+            raise ValueError('Expected a nonempty Spark launcher setting: '+name)
+        return value
+    if required:
+        raise ValueError('Missing Spark launcher setting: '+name)
+    return ''
 
 
 def archive_entries(archive):

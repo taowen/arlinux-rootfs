@@ -62,14 +62,18 @@ own online features still require networking.
 WeChat also installs its undeclared NSS dependency. Applications select their
 native display backend from the desktop session environment. WeChat uses its
 native Qt surface size because its bundled Qt paints incorrectly at HiDPI scale.
-Keep the asset names `qq-arm64.deb` and `wechat-arm64.deb` when replacing installers;
-the launcher reads the current digest from the release rather than pinning a
-version in Guest Tools. Upload official ARM64 packages without repacking them:
+The same release supplies Android Pad Apps as `wps-pad.apk` and `capcut-pad.apks`.
+The Android host owns their catalog and private sandbox installation. The latter
+is a flat ZIP of original signed APKs, including `base.apk` and all required
+splits; never merge or re-sign the APKs. Keep these asset names when replacing
+installers. Both launchers read current digests from `SHA256SUMS` rather than
+requiring a code update. Preserve every release asset's checksum when updating:
 
 ```powershell
-$sums = 'qq-arm64.deb', 'wechat-arm64.deb' | ForEach-Object { "$( (Get-FileHash $_ -Algorithm SHA256).Hash.ToLowerInvariant() )  $_" }
+$assets = 'qq-arm64.deb', 'wechat-arm64.deb', 'wps-pad.apk', 'capcut-pad.apks'
+$sums = $assets | ForEach-Object { "$( (Get-FileHash $_ -Algorithm SHA256).Hash.ToLowerInvariant() )  $_" }
 [IO.File]::WriteAllText((Join-Path $PWD 'SHA256SUMS'), ($sums -join "`n") + "`n")
-gh release upload popular-apps qq-arm64.deb wechat-arm64.deb --clobber --repo taowen/arlinux-rootfs
+gh release upload popular-apps @assets --clobber --repo taowen/arlinux-rootfs
 gh release upload popular-apps SHA256SUMS --clobber --repo taowen/arlinux-rootfs
 ```
 

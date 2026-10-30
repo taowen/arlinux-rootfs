@@ -18,28 +18,27 @@ Read `/usr/lib/arlinux/python/arlinux/tasks.py` for the public API. `running()`
 lists owned tasks; window IDs support focus, maximize and normal close, while
 `stop(task_id)` ends a managed task. Use only the current operation's targets.
 Do not substitute title matching or PID signals. Save dialogs need normal handling.
-Labels can be children of an actionable container. `find()` can return both;
-inspect the advertised actions and operate on the matching action owner:
+Labels can be children of an actionable container. Use the action filter to
+select real action owners, then deliver by name:
 
 ```python
-for node in a11y.find(label, app=application):
-    if node.name != label:
-        continue
-    try:
-        actions = node.queryAction()
-    except NotImplementedError:
-        continue
-    index = next((i for i in range(actions.nActions)
-                  if actions.getName(i).lower() in ('click', 'press', 'activate')), None)
-    if index is not None:
-        print(actions.doAction(index))
+from arlinux import a11y
+for node in a11y.find(label, app=application, action='click'):
+    if node.name == label:
+        print(a11y.perform(node, 'click'))
         break
 else:
     raise RuntimeError('No advertised activation action; inspect a screenshot')
 ```
 
 Query actions with `nActions`, `getName(index)` and `doAction(index)` rather than
-assuming GI enum helpers or action-list attributes. Verify the next page after
+assuming GI enum helpers or action-list attributes, or use `a11y.actions(node)`
+and `a11y.perform(node, action)`. Never cache action indexes across calls:
+scrolling can insert a backward action before the forward action. To discover
+unnamed scroll containers, use `find(app=application, action='scroll-forward')`;
+select the visible container containing the intended content using window-local
+geometry, rather than activating the first unnamed control in the application.
+Do not import underscore-prefixed private helpers. Verify the next page after
 delivery. Hosted Android apps are native Wayland windows; an AT-SPI screen origin
 of `(-1,-1)` means unavailable global coordinates, not missing window-local
 geometry or unavailable semantic actions. Do not search their titles with

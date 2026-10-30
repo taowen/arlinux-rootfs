@@ -118,17 +118,48 @@ def _cached_showing(item):
     return bool(int(item[9][index // 32]) & (1 << (index % 32)))
 
 
-def find(query: str, *, app: str | None = None, root=None,
-         limit: int = 10, max_nodes: int | None = None, showing: bool = True):
+def actions(node) -> list[str]:
+    """Return currently advertised action names; action indexes are not stable."""
+    try:
+        interface = node.queryAction()
+    except NotImplementedError:
+        return []
+    return [interface.getName(i) for i in range(interface.nActions)]
+
+
+def perform(node, action: str = 'click') -> bool:
+    """Deliver one named semantic action, resolving its index at call time.
+
+    Do not cache action indexes: scrolling can insert or remove backward/forward
+    actions. This never retries, clicks coordinates or walks to a guessed parent.
+    Re-find the target after navigation and verify the resulting UI separately.
+    """
+    import pyatspi
+
+    state = node.getState()
+    if not state.contains(pyatspi.STATE_ENABLED) or not state.contains(pyatspi.STATE_SHOWING):
+        return False
+    interface = node.queryAction()
+    for index in range(interface.nActions):
+        if interface.getName(index).casefold() == action.casefold():
+            return bool(interface.doAction(index))
+    raise LookupError(f'Node does not advertise action {action!r}')
+
+
+def find(query: str = '', *, app: str | None = None, root=None,
+         limit: int = 10, max_nodes: int | None = None, showing: bool = True,
+         action: str | None = None):
     """Find accessible nodes by name/description, without printing a whole tree.
 
     ``app`` selects an application by exact name, then substring. Pass a node
     as ``root`` to search only that subtree. Results are live upstream nodes;
     re-find after a navigation because an app may replace them at any time.
+    ``action`` filters by a currently advertised action name. With that filter,
+    query may be empty to discover unnamed controls, such as scroll containers.
     """
     needle = query.strip().casefold()
-    if not needle or limit < 1:
-        raise ValueError("query and limit must be nonempty/positive")
+    if (not needle and not action) or limit < 1:
+        raise ValueError("pass a query or action, and a positive limit")
     result = []
     roots = _roots(app, root)
     try:
@@ -141,7 +172,10 @@ def find(query: str, *, app: str | None = None, root=None,
             if needle not in str(item[6]).casefold() and needle not in str(item[8]).casefold():
                 continue
             try:
-                result.append(_resolve(top, item, by_path))
+                node = _resolve(top, item, by_path)
+                if action is not None and action.casefold() not in [name.casefold() for name in actions(node)]:
+                    continue
+                result.append(node)
             except Exception:
                 continue  # The UI changed after its cache was read.
             if len(result) >= limit:
@@ -154,6 +188,8 @@ def find(query: str, *, app: str | None = None, root=None,
             label = node.name or ""
             matches = needle in label.casefold() or needle in (node.description or "").casefold()
             if matches and (not showing or _showing(node)):
+                if action is not None and action.casefold() not in [name.casefold() for name in actions(node)]:
+                    continue
                 result.append(node)
                 if len(result) >= limit:
                     break

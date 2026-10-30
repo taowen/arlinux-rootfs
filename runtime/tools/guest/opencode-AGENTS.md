@@ -100,9 +100,11 @@ your Read tool as an image. It captures the actual compositor, including hosted
 Android apps; it does not require ADB, root, grim or system screenshot permission.
 Use `desktop.click(x, y, image='/tmp/arlinux-desktop.png')` only for a point you
 observed in that unmodified PNG; use `count=2` for a desktop double-click. Read
-`desktop.dimensions(path)` and account for any scaling in the image viewer.
-These coordinates are compositor pixels, not phone pixels or an AT-SPI window's
-local coordinates. Take a new screenshot after navigation and verify the effect.
+`desktop.dimensions(path)` for the saved image size. Screenshots default to a
+1280-pixel longest side so Read does not shrink them. Click in PNG image pixels;
+the API maps those to compositor pixels using metadata in the same file. Do not
+resize the PNG or use phone pixels or AT-SPI window-local coordinates. Take a new
+screenshot after navigation and verify the effect.
 Keep existing upstream keyboard/clipboard tools for typing and shortcuts.
 If the selected model cannot view images, report that limitation and request a
 vision-capable model; do not claim that reading PNG bytes is visual inspection.

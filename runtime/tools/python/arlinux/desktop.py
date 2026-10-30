@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import os
 from pathlib import Path
 import socket
 import struct
 import tempfile
+import zlib
 
 
 def _request(value):
@@ -41,18 +43,27 @@ def dimensions(image: str | os.PathLike) -> tuple[int, int]:
     return struct.unpack('!II', header[16:24])
 
 
-def screenshot(path: str | os.PathLike) -> Path:
+def screenshot(path: str | os.PathLike, *, max_size: int = 1280) -> Path:
     """Save the latest completed visible desktop frame as a private PNG.
 
-    Returns its absolute path. Inspect the image before choosing coordinates;
-    if an image viewer scales it, convert points back to ``dimensions(path)``.
+    Returns its absolute path. The longest image side is at most max_size
+    (default 1280), avoiding OpenCode Read's automatic 2000-pixel downscaling.
+    Choose coordinates in this PNG, using dimensions(path). The PNG retains
+    its desktop geometry so click() maps image pixels back to desktop pixels.
     It includes all compositor content, including hosted Android applications,
     but excludes Android system windows, the phone keyboard and phone overlays.
     A delivered input action need not have produced a new frame yet: wait for
     the application's resulting UI before treating a screenshot as acceptance.
     """
-    response = _request({'operation': 'screenshot'})
+    response = _request({'operation': 'screenshot', 'maxSize': max_size})
     data = base64.b64decode(response['png'], validate=True)
+    geometry = dict(image_width=response['width'], image_height=response['height'],
+                    desktop_width=response['desktopWidth'], desktop_height=response['desktopHeight'])
+    text = b'arlinux.desktop\0' + json.dumps(geometry, separators=(',', ':')).encode()
+    chunk = b'tEXt' + text
+    # PNG text metadata immediately after IHDR keeps each image self-contained;
+    # no sidecar, runtime table or guessed viewer scale is needed for input.
+    data = data[:33] + struct.pack('!I', len(text)) + chunk + struct.pack('!I', zlib.crc32(chunk)) + data[33:]
     target = Path(path).expanduser().absolute()
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = None
@@ -73,10 +84,30 @@ def click(x: float, y: float, *, image: str | os.PathLike,
           button: str = 'left', count: int = 1) -> None:
     """Click an observed point in an unmodified screenshot; count=2 double-clicks.
 
-    The host rejects resized images, changed desktop dimensions and points
-    outside the canvas. Take another screenshot after navigation. Delivery is
+    The image geometry maps PNG pixels to desktop pixels. Resized images,
+    changed desktop dimensions and points outside the PNG are rejected.
+    Take another screenshot after navigation. Delivery is
     not proof of success: verify the resulting UI through AT-SPI or an image.
     """
     width, height = dimensions(image)
-    _request({'operation': 'click', 'x': x, 'y': y, 'width': width, 'height': height,
+    with Path(image).open('rb') as source:
+        source.seek(33)
+        header = source.read(8)
+        if len(header) != 8:
+            raise ValueError('Take a new screenshot with desktop.screenshot')
+        length, kind = struct.unpack('!I4s', header)
+        if kind != b'tEXt' or not 1 <= length <= 4096:
+            raise ValueError('Take a new screenshot with desktop.screenshot')
+        text = source.read(length)
+        crc = source.read(4)
+    if len(crc) != 4 or zlib.crc32(kind + text) != struct.unpack('!I', crc)[0] or not text.startswith(b'arlinux.desktop\0'):
+        raise ValueError('Screenshot geometry is missing or damaged')
+    geometry = json.loads(text.split(b'\0', 1)[1])
+    if (width, height) != (geometry['image_width'], geometry['image_height']):
+        raise ValueError('Screenshot was resized; take a new screenshot')
+    if not math.isfinite(x) or not math.isfinite(y) or not 0 <= x < width or not 0 <= y < height:
+        raise ValueError('Point is outside the screenshot')
+    desktop_width, desktop_height = geometry['desktop_width'], geometry['desktop_height']
+    _request({'operation': 'click', 'x': x * desktop_width / width, 'y': y * desktop_height / height,
+              'width': desktop_width, 'height': desktop_height,
               'button': button, 'count': count})

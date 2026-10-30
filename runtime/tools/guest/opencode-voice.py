@@ -12,6 +12,7 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from opencode import installed_binary
 import desktop_bus
+import shell_tasks
 
 
 class AccessibleNotReady(RuntimeError):
@@ -69,15 +70,20 @@ def find_opencode():
     raise AccessibleNotReady("OpenCode window not found")
 
 
-def raise_opencode() -> None:
-    windows = subprocess.run(
-        ["xdotool", "search", "--onlyvisible", "--name", "^OpenCode$"],
-        capture_output=True, text=True,
-    ).stdout.split()
-    if windows:
-        subprocess.run(["xdotool", "windowactivate", "--sync", windows[-1]],
-                       check=True, timeout=3)
-    # Native Wayland windows are focused through the prompt's AT-SPI Component.
+def raise_opencode() -> bool:
+    # Use the same owned launch and compositor identities as Tasks. Focusing an
+    # AT-SPI entry or an X11 child alone cannot select a hidden Yibu task tab.
+    owners = [task for task in shell_tasks.task_request('list')['tasks']
+              if task.get('appId') == 'arlinux-opencode.desktop']
+    pids = {pid for task in owners for pid in task['pids']}
+    if not pids:
+        return False
+    windows = [window for window in shell_tasks.clients() if window.get('pid') in pids]
+    if not windows:
+        return False
+    window = min(windows, key=lambda item: item.get('focusHistoryID', 9999))
+    shell_tasks.operate(shell_tasks.identity(window), 'focus')
+    return True
 
 
 def find_named(root, role: str, name: str):
@@ -158,7 +164,6 @@ def activate(node, action_name: str) -> bool:
 
 
 def focus_prompt(*, deadline=None) -> None:
-    raise_opencode()
     try:
         find_opencode()
     except AccessibleNotReady:
@@ -171,9 +176,14 @@ def focus_prompt(*, deadline=None) -> None:
     if deadline is None:
         deadline = time.monotonic() + 24
     navigation_started = False
+    raised = False
     last_pending = "OpenCode prompt is loading"
     while time.monotonic() < deadline:
         try:
+            if not raised:
+                if not raise_opencode():
+                    raise AccessibleNotReady('OpenCode has no mapped task window yet')
+                raised = True
             prompt = open_prompt(allow_navigation=not navigation_started)
             if prompt is None:
                 navigation_started = True
@@ -197,7 +207,8 @@ def focus_prompt(*, deadline=None) -> None:
 
 
 def send_prompt() -> None:
-    raise_opencode()
+    if not raise_opencode():
+        raise RuntimeError('OpenCode has no mapped task window')
     state = Path(os.environ.get("TMPDIR", "/tmp")) / "opencode-voice-baseline"
     if not state.exists():
         raise RuntimeError("voice prompt was not prepared")

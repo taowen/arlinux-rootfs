@@ -42,6 +42,9 @@ The shared right-edge OpenCode voice helper lives in `runtime/tools/guest` and
 ships with Guest Tools for every distribution, including Yibu and Classic. It
 waits for the actual AT-SPI composer within one bounded startup deadline, not
 merely for the Electron document. Keep it out of individual desktop recipes.
+It activates the owned OpenCode window through the existing Tasks/compositor
+identity before focusing or submitting the prompt, including when a hosted
+Android application is in front. Do not replace this with X11 title matching.
 
 Protocol 4 distribution manifests declare `guestToolsApi: 1`. Android installs a
 matching independently verified Guest Tools package before first boot, records

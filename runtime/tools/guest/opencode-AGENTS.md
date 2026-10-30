@@ -10,6 +10,32 @@ For a dense tree, optional `arlinux.a11y.find(query, app=...)` returns live
 overview. Read their signatures and docstrings in
 `usr/lib/arlinux/python/arlinux/a11y.py`; use upstream node interfaces to act and
 verify the result. A short overview is not the full accessibility tree.
+Labels can be children of an actionable container. `find()` can return both;
+inspect the advertised actions and operate on the matching action owner:
+
+```python
+for node in a11y.find(label, app=application):
+    if node.name != label:
+        continue
+    try:
+        actions = node.queryAction()
+    except NotImplementedError:
+        continue
+    index = next((i for i in range(actions.nActions)
+                  if actions.getName(i).lower() in ('click', 'press', 'activate')), None)
+    if index is not None:
+        print(actions.doAction(index))
+        break
+else:
+    raise RuntimeError('No advertised activation action; inspect a screenshot')
+```
+
+Query actions with `nActions`, `getName(index)` and `doAction(index)` rather than
+assuming GI enum helpers or action-list attributes. Verify the next page after
+delivery. Hosted Android apps are native Wayland windows; an AT-SPI screen origin
+of `(-1,-1)` means unavailable global coordinates, not missing window-local
+geometry or unavailable semantic actions. Do not search their titles with
+xdotool: that can match your own OpenCode conversation title instead.
 For bulk text (ASCII as well as Unicode) into an application that exposes `Text` but not
 `EditableText` (notably Chromium/Electron contenteditable controls), focus the
 semantic target and use the target window's real display backend. For an X11 or
@@ -21,6 +47,8 @@ to `wl-copy` and run `wtype -M ctrl v -m ctrl`. Both `DISPLAY` and
 instead of guessing from environment variables. Do not use `xdotool type` for bulk
 text: zero-delay event injection can lose letters and modifiers. Use key tools
 for shortcuts, and verify the complete inserted text before submitting.
+With wtype, named keys require `-k`: for example `wtype -M ctrl -k Home -m ctrl`
+and `wtype -M shift -k End -m shift`. Bare `Home` or `End` types those letters.
 
 Windows applications use the instance's shared Bionic Wine prefix. For file
 dialogs, import `windows` from `/usr/lib/arlinux` and use

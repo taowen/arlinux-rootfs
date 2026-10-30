@@ -243,6 +243,8 @@ def click(node, *, button: int = 1) -> tuple[int, int]:
     extents = node.queryComponent().getExtents(pyatspi.DESKTOP_COORDS)
     if extents.width <= 0 or extents.height <= 0:
         raise RuntimeError(f"node has no on-screen extents: {extents}")
+    if extents.x == -1 and extents.y == -1:
+        raise RuntimeError('Screen origin is unavailable; use the node Action or desktop.screenshot/click')
     x = extents.x + extents.width // 2
     y = extents.y + extents.height // 2
     subprocess.run(["xdotool", "mousemove", "--sync", str(x), str(y), "click", str(button)],

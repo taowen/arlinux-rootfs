@@ -32,8 +32,8 @@ do not stage it on `C:` and copy it as a workaround. If using `cmd.exe` through
 `windows.run`, pass ordinary command arguments separately, for example
 `['/c', 'dir', dos_directory]`, not a nested shell-quoted command string.
 
-Arlinux adds only the platform-specific speech integration that upstream APIs do
-not provide. Its complete public API, signature, and docstring are in
+Arlinux adds platform-specific speech and desktop observation/input that upstream
+APIs do not provide. The speech API, signature, and docstring are in
 `usr/lib/arlinux/python/arlinux/__init__.py`. Read that source file before
 using speech; the private implementation beside it may be read when debugging.
 
@@ -50,11 +50,28 @@ listens to. After toggling or pressing, query the dependent control, such as a
 confirm button gaining `ENABLED`. A custom Windows/WinForms button need not
 implement `BM_CLICK`; message delivery is not a click result. Use its advertised
 native accessibility action and verify the effect. If no action is exposed,
-report it as unsupported rather than inventing a semantic action or using Wine
-desktop coordinates on the Android screen. For Linux X11 controls, if it did not change,
+use the visual interface below, distinguishing visual operation from semantic
+support. Never use Wine desktop coordinates on the Android screen. For Linux X11 controls, if it did not change,
 `arlinux.a11y.click(node)` clicks the center of the node's reported extents with
 real X11 pointer input. Those are the application's own coordinates, not guessed
 ones.
+
+When a hosted Android, Wine or Linux application has missing or ineffective
+semantic controls, use `from arlinux import desktop` for visual operation. Read
+`/usr/lib/arlinux/python/arlinux/desktop.py` for its public API. Save a PNG with
+`desktop.screenshot('/tmp/arlinux-desktop.png')`, then inspect that file with
+your Read tool as an image. It captures the actual compositor, including hosted
+Android apps; it does not require ADB, root, grim or system screenshot permission.
+Use `desktop.click(x, y, image='/tmp/arlinux-desktop.png')` only for a point you
+observed in that unmodified PNG; use `count=2` for a desktop double-click. Read
+`desktop.dimensions(path)` and account for any scaling in the image viewer.
+These coordinates are compositor pixels, not phone pixels or an AT-SPI window's
+local coordinates. Take a new screenshot after navigation and verify the effect.
+Keep existing upstream keyboard/clipboard tools for typing and shortcuts.
+If the selected model cannot view images, report that limitation and request a
+vision-capable model; do not claim that reading PNG bytes is visual inspection.
+Screenshots may contain private documents: capture only what the task needs,
+keep them local, and never upload or share them without the user's instruction.
 
 The desktop session owns its D-Bus and AT-SPI buses, compositor, input method
 and app runtimes. Never stop, delete or replace them: do not remove bus sockets

@@ -7,10 +7,10 @@ mature APIs do not provide on Arlinux.
 
 from __future__ import annotations
 
-from . import _tts, desktop
+from . import _tts, desktop, tasks
 
 
-__all__ = ("speak", "desktop")
+__all__ = ("speak", "desktop", "tasks")
 
 
 def speak(

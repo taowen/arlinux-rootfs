@@ -10,6 +10,14 @@ For a dense tree, optional `arlinux.a11y.find(query, app=...)` returns live
 overview. Read their signatures and docstrings in
 `usr/lib/arlinux/python/arlinux/a11y.py`; use upstream node interfaces to act and
 verify the result. A short overview is not the full accessibility tree.
+Before querying an application hidden behind OpenCode, use `from arlinux import
+tasks` and inspect `tasks.windows()`. Select its actual `app_id` and stable `id`,
+then call `tasks.focus(id)` and re-read its accessibility tree. A hidden Android
+task can temporarily have an empty tree; that does not prove missing semantics.
+Read `/usr/lib/arlinux/python/arlinux/tasks.py` for the public API. `running()`
+lists owned tasks; window IDs support focus, maximize and normal close, while
+`stop(task_id)` ends a managed task. Use only the current operation's targets.
+Do not substitute title matching or PID signals. Save dialogs need normal handling.
 Labels can be children of an actionable container. `find()` can return both;
 inspect the advertised actions and operate on the matching action owner:
 

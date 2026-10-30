@@ -39,6 +39,13 @@ def windows() -> list[dict]:
     result = []
     for window in shell.clients():
         owner = next((t for t in owners if window.get('pid') in t['pids']), None)
+        if owner is None:
+            # Hosted windows belong to the Android host process, while task
+            # process ownership describes the guest. Match its declared app ID
+            # only when unique; multiple launches must remain unassociated.
+            matches = [t for t in owners if t['appId'] and t['appId'] == window.get('class')]
+            if len(matches) == 1:
+                owner = matches[0]
         result.append(dict(id=shell.identity(window), title=window.get('title', ''),
                            app_id=window.get('class', ''),
                            task_id=owner['id'] if owner else '',

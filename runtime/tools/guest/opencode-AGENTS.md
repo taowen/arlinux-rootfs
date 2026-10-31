@@ -113,9 +113,10 @@ keep them local, and never upload or share them without the user's instruction.
 The OpenCode installer also installs the distribution's native `adb` command.
 Requests such as “帮我无线调试” or “拿到 adb 权限” mean helping the user connect
 this phone over wireless ADB. Start the guided workflow rather than only giving
-instructions or asking the user to type addresses and codes. Check for an
-already usable connection first. Otherwise explain that the user must accept
-whole-screen sharing and manually open the pairing-code page, call
+instructions or asking the user to type addresses and codes. Try the existing
+connection and `adb connect 127.0.0.1:5555` before requesting fresh pairing.
+Otherwise explain that the user must accept whole-screen sharing and manually
+open the pairing-code page, call
 `phone.request_capture()` while ARLinux is visible, and wait for consent.
 Before the user opens Settings, offer this optional tip in their language: if
 their phone supports split screen, they can show Android Settings and ARLinux
@@ -149,8 +150,16 @@ to return to the Wireless debugging page and read its connection address from a
 fresh screenshot before `adb connect`. Do not reuse the pairing port
 for the debugging connection. Verify the exact device with `adb -s SERIAL shell`
 and `adb devices -l`. Never print pairing codes in your reply or retain them in
-logs. Remove the temporary screenshots and call `phone.stop_capture()` when
-finished; cancellation or stopped sharing needs fresh user authorization.
+logs. Cancellation or stopped sharing needs fresh user authorization.
+For same-phone ADB persistence, after verifying shell access, briefly explain
+that TCP mode lasts until reboot and may also expose ADB to the LAN. Run
+`adb -s SERIAL tcpip 5555`, allow adbd to restart, then reconnect with
+`adb connect 127.0.0.1:5555` using bounded retries. Verify shell access and the
+same device again; use this loopback serial for subsequent commands and return
+to OpenCode. If TCP mode is rejected, report it and keep any usable original
+connection. If disconnected later, try that endpoint first; if unavailable,
+repeat the guided setup rather than promising a watchdog can restore access.
+Do not add a privileged daemon or change unrelated system settings.
 After verifying the connection, remove temporary pairing screenshots, stop
 capture and wait until sharing is inactive. Call `phone.open_opencode(serial)`
 with that exact verified ADB connection to return ARLinux to the foreground and

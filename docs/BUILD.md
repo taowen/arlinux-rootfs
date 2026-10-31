@@ -5,6 +5,9 @@ It has no Bionic Wine source, build graph, assembly or publishing pipeline.
 Application launchers download the independently published runtime when needed. Guest Tools bootstraps only the independently
 published Wine installer; Wine owns subsequent component selection, downloads
 and prefix installation. The distribution does not maintain a Wine version list.
+`runtime/tools/component_store.py` provides the common verified release/candidate
+storage used by the bootstrap and installer. The installer host protocol is owned
+by the [Wine guide](https://github.com/taowen/wine/blob/arlinux/arlinux/BUILD.md#independent-runtime-producers).
 
 The `third_party/libhybris` submodule follows libhybris's single `arlinux`
 integration branch, shared with Wine. Keep the two consumers pinned to the same

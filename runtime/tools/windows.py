@@ -1,26 +1,17 @@
 """Install Bionic Wine and launch Windows programs through the Android host."""
 import argparse
-import hashlib
-from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
 import re
 import socket
-import shutil
 import subprocess
 import tarfile
-import tempfile
 import time
 import shared
 import desktop_bus
 
 MANIFEST = Path('/usr/lib/arlinux/guest/windows-downloads.tsv')
-
-
-def digest(path):
-    with path.open('rb') as stream:
-        return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
 def storage():
@@ -55,151 +46,42 @@ def runtime(identity=None):
     return root
 
 
+def component_store():
+    from component_store import ComponentStore
+    return ComponentStore(runtime_storage()/'components', storage()/'components',
+                          os.environ.get('ARLINUX_WINE_COMPONENTS'), 'bionic-runtime.json')
+
+
 def _installer():
-    """Fetch the one Wine-owned bootstrap; component policy lives in that package."""
+    """Load a verified Wine installer; its host contract uses explicit arguments."""
     import types
     import sys
     rows = [line.split('\t') for line in MANIFEST.read_text().splitlines() if line.strip() and not line.startswith('#')]
-    if len(rows) != 1 or len(rows[0]) != 4:
-        raise ValueError('Expected one Wine installer endpoint')
-    name = 'wine-installer'
-    state = storage()/'installer.json'
-    selected = None
-    overrides = os.environ.get('ARLINUX_WINE_COMPONENTS')
-    override = Path(overrides)/(name+'.json') if overrides else None
-    if override is not None and override.is_file():
-        expected = json.loads(override.read_text())['sha256']
-        source = shared.directory('downloads')/(expected+'.json')
-        if not re.fullmatch('[0-9a-f]{64}', expected) or digest(source) != expected:
-            raise ValueError('Wine installer descriptor checksum mismatch')
-        selected = json.loads(source.read_text())
-    else:
-        try:
-            cached = json.loads(state.read_text())
-            if cached['endpoint'] == rows[0] and 0 <= time.time()-cached['checkedAt'] < 3600:
-                selected = cached['asset']
-        except (FileNotFoundError, ValueError, KeyError, TypeError):
-            pass
-        if selected is None:
-            selected = _bootstrap_release_asset(rows[0])
-        expected = selected['sha256']
-    identity = selected['sha256'] if selected.get('name') == name else expected
-    if not re.fullmatch('[0-9a-f]{64}', identity):
-        raise ValueError('Invalid Wine installer identity')
-    home = runtime_storage()/'components'/name
-    home.mkdir(parents=True, exist_ok=True)
-    root = home/identity
-    with shared.locked(home/'install.lock'):
-        if not root.is_dir():
-            if selected.get('kind') == 'arlinux-bionic-components' and selected.get('format') == 1:
-                archives, metadata = selected['components'], selected['runtime']
-            elif selected.get('name') == name:
-                archives, metadata = [selected], None
-            else:
-                raise ValueError('Invalid Wine installer descriptor')
-            with tempfile.TemporaryDirectory(prefix='bootstrap-', dir=home) as temporary:
-                stage = Path(temporary)/'installer'
-                stage.mkdir()
-                seen = set()
-                for item in archives:
-                    asset = item.get('asset', item['file'])
-                    if (not re.fullmatch('[0-9a-f]{64}', item['sha256']) or not re.fullmatch(
-                        r'https://github[.]com/taowen/wine/releases/download/[^/]+/'+re.escape(asset), item['url'])):
-                        raise ValueError('Invalid Wine installer archive')
-                    archive = shared.download(item['url'], item['sha256'], '.tar.gz', progress=False)
-                    if item.get('bytes') is not None and archive.stat().st_size != item['bytes']:
-                        raise ValueError('Wine installer size mismatch')
-                    with tarfile.open(archive, 'r:*') as bundle:
-                        for member in bundle:
-                            if member.name == 'bionic-runtime.json':
-                                if metadata is not None or not member.isfile() or member.size > 4*1024*1024:
-                                    raise ValueError('Invalid installer metadata')
-                                metadata = json.load(bundle.extractfile(member))
-                                continue
-                            if (member.name in seen or chr(92) in member.name or ':' in member.name or
-                                any(part in ('', '.', '..') for part in member.name.split('/')) or
-                                not member.isfile()):
-                                raise ValueError('Unsafe Wine installer archive path')
-                            seen.add(member.name)
-                            bundle.extract(member, stage, filter='data')
-                if not metadata or metadata.get('installerProtocol') != 1:
-                    raise ValueError('Unsupported Wine installer protocol')
-                (stage/'bionic-runtime.json').write_text(json.dumps(metadata)+'\n')
-                stage.rename(root)
-        metadata = json.loads((root/'bionic-runtime.json').read_text())
-        if metadata.get('installerProtocol') != 1:
-            raise ValueError('Unsupported Wine installer protocol')
-        for relative, checksum in metadata['files'].items():
-            file = root/relative
-            if (not file.resolve().is_relative_to(root.resolve()) or not re.fullmatch('[0-9a-f]{64}', checksum)
-                or digest(file) != checksum):
-                raise ValueError('Wine installer file checksum mismatch')
-    if override is None or not override.is_file():
-        state.parent.mkdir(parents=True, exist_ok=True)
-        with shared.locked(state.with_suffix('.lock')):
-            pending = state.with_suffix('.tmp')
-            pending.write_text(json.dumps(dict(endpoint=rows[0], checkedAt=time.time(), asset=selected))+'\n')
-            pending.replace(state)
-    module_name = 'arlinux_wine_installer_'+identity
+    if len(rows) != 1 or rows[0] != ['wine-installer', 'taowen/wine', 'arlinux-wine-installer-latest', 'runtime.tar.gz']:
+        raise ValueError('Expected the Wine installer bootstrap endpoint')
+    store = component_store()
+    root = store.get(rows[0])
+    if store.validate(root).get('installerProtocol') != 1:
+        raise ValueError('Unsupported Wine installer protocol')
+    module_name = 'arlinux_wine_installer_'+root.name
     if module_name not in sys.modules:
         source = root/'files/share/arlinux/wine-installer/runtime.py'
         module = types.ModuleType(module_name)
         module.__file__ = str(source)
-        # Do not create bytecode files inside an immutable downloaded component.
+        # Keep immutable downloaded components free of generated bytecode.
         exec(compile(source.read_bytes(), str(source), 'exec'), module.__dict__)
         sys.modules[module_name] = module
     return sys.modules[module_name]
 
 
+def run_native_tool(runtime, tool, arguments):
+    """Installer protocol 1: execute through the selected native runtime's driver."""
+    return _host_request(dict(action='runtime-tool', runtime=str(host_path(runtime)),
+        tool=str(host_path(tool)), args=[str(host_path(value)) if isinstance(value, Path) else str(value) for value in arguments]), timeout=40)['stdout']
+
+
 def ensure_runtime():
-    return _installer().ensure_runtime()
-
-
-def _bootstrap_release_asset(row):
-    name, repository, tag, filename = row
-    if row != ['wine-installer', 'taowen/wine', 'arlinux-wine-installer-latest', 'runtime.tar.gz']:
-        raise ValueError('Invalid Wine installer endpoint')
-    endpoint = f'https://api.github.com/repos/{repository}/releases/tags/{tag}'
-    try:
-        release = json.loads(shared.github_metadata(endpoint))
-    except (OSError, subprocess.SubprocessError, ValueError):
-        # Preserve GitHub's public digest fallback when the unauthenticated API
-        # is rate limited. Download size is then recorded after hash validation.
-        class Assets(HTMLParser):
-            def __init__(self):
-                super().__init__()
-                self.checksums = []
-                self.link = False
-
-            def handle_starttag(self, tag_name, attrs):
-                attrs = dict(attrs)
-                if tag_name == 'a' and attrs.get('href') == f'/{repository}/releases/download/{tag}/{filename}':
-                    self.link = True
-                if tag_name == 'clipboard-copy' and attrs.get('aria-label') == 'Copy to clipboard digest for '+filename:
-                    self.checksums.append(attrs.get('value', ''))
-
-        page = shared.github_metadata(f'https://github.com/{repository}/releases/expanded_assets/{tag}')
-        assets = Assets()
-        assets.feed(page.decode('utf-8'))
-        if not assets.link or len(assets.checksums) != 1 or not re.fullmatch('sha256:[0-9a-f]{64}', assets.checksums[0]):
-            raise ValueError('Runtime release has no verified digest: '+name)
-        checksum = assets.checksums[0][7:]
-        return dict(name=name, file=name+'-'+checksum+'.tar.gz', asset=filename,
-                    sha256=checksum, bytes=None,
-                    url=f'https://github.com/{repository}/releases/download/{tag}/{filename}')
-    if release.get('draft') or release.get('tag_name') != tag:
-        raise ValueError('Invalid runtime release')
-    asset = next((a for a in release.get('assets', []) if a.get('name') == filename), None)
-    if (not asset or asset.get('state') != 'uploaded'
-            or not isinstance(asset.get('digest'), str)
-            or not re.fullmatch('sha256:[0-9a-f]{64}', asset['digest'])
-            or type(asset.get('size')) is not int or asset['size'] <= 0
-            or type(asset.get('id')) is not int or asset['id'] <= 0):
-        raise ValueError('Runtime release has no verified asset: '+name)
-    checksum = asset['digest'][7:]
-    return dict(name=name, file=name+'-'+checksum+'.tar.gz', asset=filename,
-                sha256=checksum, bytes=asset['size'],
-                url=f'https://github.com/{repository}/releases/download/{tag}/{filename}')
+    return _installer().ensure_runtime(component_store(), storage(), run_native_tool)
 
 
 def host_path(path):

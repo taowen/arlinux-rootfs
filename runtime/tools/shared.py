@@ -75,7 +75,7 @@ def github_asset(url, expected):
             if not isinstance(identity, int) or identity <= 0:
                 return None
             checksum = asset.get('digest')
-            if checksum is not None and checksum != 'sha256:' + expected:
+            if expected is not None and checksum is not None and checksum != 'sha256:' + expected:
                 return None
             return f'https://api.github.com/repos/{owner}/{repo}/releases/assets/{identity}'
     except (OSError, subprocess.SubprocessError, ValueError, AttributeError):
@@ -309,17 +309,25 @@ def github_metadata(url):
     """Fetch bounded official metadata through the same measured route policy."""
     if urlparse(url).scheme != 'https' or urlparse(url).hostname not in ('api.github.com', 'github.com'):
         raise ValueError('Expected official GitHub metadata URL')
-    return download_metadata(url)
+    try:
+        return download_metadata(url)
+    except (OSError, subprocess.SubprocessError):
+        # Release metadata is also available through GitHub's official asset
+        # API. Do not route integrity metadata through a public release proxy.
+        asset = github_asset(url, None)
+        if asset is None:
+            raise
+        return download_metadata(asset, headers=['-H', 'Accept: application/octet-stream'])
 
 
-def download_metadata(url, limit=2 * 1024 * 1024):
+def download_metadata(url, limit=2 * 1024 * 1024, *, headers=()):
     """Bounded official metadata; CDN selection never sends it to a release proxy."""
     if urlparse(url).scheme != 'https':
         raise ValueError('Expected HTTPS metadata URL')
     with tempfile.TemporaryDirectory(prefix='.download-metadata-', dir=directory('downloads')) as temporary:
         target = Path(temporary)/'response'
-        if not download_transfer([(url, [])], target, None, limit=limit):
-            subprocess.run(['curl', *CURL_TLS, '-fsSL', '--connect-timeout', '3', '--max-time', '10',
+        if not download_transfer([(url, list(headers))], target, None, limit=limit):
+            subprocess.run(['curl', *CURL_TLS, *headers, '-fsSL', '--connect-timeout', '3', '--max-time', '10',
                             '--max-filesize', str(limit), '-o', str(target), url],
                            check=True, timeout=12, stdout=sys.stderr)
         data = target.read_bytes()

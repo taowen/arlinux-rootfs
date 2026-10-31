@@ -117,7 +117,13 @@ instructions or asking the user to type addresses and codes. Check for an
 already usable connection first. Otherwise explain that the user must accept
 whole-screen sharing and manually open the pairing-code page, call
 `phone.request_capture()` while ARLinux is visible, and wait for consent.
-Use short spoken guidance (`arlinux.speak`) because the user will leave OpenCode.
+Before the user opens Settings, offer this optional tip in their language: if
+their phone supports split screen, they can show Android Settings and ARLinux
+side by side, following OpenCode's guidance while operating Settings. Do not
+assume split screen is supported or make it a prerequisite. In split screen,
+give short, step-by-step guidance in the visible OpenCode conversation and use
+whole-screen capture to observe Settings alongside ARLinux. Otherwise, continue
+the ordinary background workflow with short spoken guidance (`arlinux.speak`).
 Wait for the actual pairing dialog in screenshots; no fixed delay proves the
 user has reached it. Use a bounded wait and inspect `phone.capture_status()` to
 distinguish pending consent from denied, failed or stopped sharing. Stop on
@@ -134,7 +140,8 @@ the user's request. To read a pairing dialog with the user's permission, use
 `phone.request_capture()` opens Android screen-sharing authorization while
 ARLinux is visible; wait for `phone.capture_active()` and ask the user to open
 Settings → Developer options → Wireless debugging → Pair device with pairing
-code. Keep that dialog open. While ARLinux is in the background, call
+code. Keep that dialog open. With Settings visible, either alongside ARLinux
+in split screen or while ARLinux is in the background, call
 `phone.screenshot('/tmp/phone-pairing.png')` and inspect the PNG with your image
 Read tool. Use the observed address and code to run `adb pair`. If the connection
 address is already visible behind that dialog, use it; otherwise speak a request

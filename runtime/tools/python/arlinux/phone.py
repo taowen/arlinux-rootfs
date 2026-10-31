@@ -28,6 +28,17 @@ def stop_capture() -> None:
     _request({'operation': 'phone-capture-stop'})
 
 
+def notify(message: str, *, title: str = 'OpenCode') -> bool:
+    """Post a phone notification; tapping it returns to ARLinux and opens OpenCode.
+
+    Works independently of screen sharing, including after stop_capture().
+    Returns false if app or channel notifications are disabled. Use speak()
+    as an audible fallback. Never include pairing codes or other secrets.
+    Delivery does not imply the user has read the notification.
+    """
+    return _request({'operation': 'phone-notify', 'title': title, 'message': message})['posted']
+
+
 def screenshot(path, *, max_size: int = 1280):
     """Save the shared phone screen as a private PNG, even with ARLinux behind Settings.
 

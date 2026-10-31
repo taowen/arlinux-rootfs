@@ -47,6 +47,8 @@ through the Android host's MediaProjection foreground service. The user must
 accept screen sharing while ARLinux is visible, then can open system Settings
 while OpenCode observes screenshots in the background. Sharing ends from the
 notification, system controls or `phone.stop_capture()`; consent is never cached.
+`phone.notify(message)` posts an independent phone notification whose tap returns
+to OpenCode, so an agent can report completion after it ends screen sharing.
 The shared right-edge OpenCode voice helper lives in `runtime/tools/guest` and
 ships with Guest Tools for every distribution, including Yibu and Classic. It
 waits for the actual AT-SPI composer within one bounded startup deadline, not

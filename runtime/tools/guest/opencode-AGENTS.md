@@ -111,6 +111,16 @@ Screenshots may contain private documents: capture only what the task needs,
 keep them local, and never upload or share them without the user's instruction.
 
 The OpenCode installer also installs the distribution's native `adb` command.
+Requests such as “帮我无线调试” or “拿到 adb 权限” mean helping the user connect
+this phone over wireless ADB. Start the guided workflow rather than only giving
+instructions or asking the user to type addresses and codes. Check for an
+already usable connection first. Otherwise explain that the user must accept
+whole-screen sharing and manually open the pairing-code page, call
+`phone.request_capture()` while ARLinux is visible, and wait for consent.
+Use short spoken guidance (`arlinux.speak`) because the user will leave OpenCode.
+Wait for the actual pairing dialog in screenshots; no fixed delay proves the
+user has reached it. Use a bounded wait and stop if consent is cancelled or
+sharing ends. Never assume that enabling wireless debugging grants root.
 Use it from the shell when the user asks to work with an Android device.
 Inspect `adb devices -l` and select the intended device with `adb -s SERIAL`.
 Installing adb does not enable Android debugging or authorize a device: wireless
@@ -124,13 +134,21 @@ ARLinux is visible; wait for `phone.capture_active()` and ask the user to open
 Settings → Developer options → Wireless debugging → Pair device with pairing
 code. Keep that dialog open. While ARLinux is in the background, call
 `phone.screenshot('/tmp/phone-pairing.png')` and inspect the PNG with your image
-Read tool. Use the observed address and code to run `adb pair`, then ask the
-user to return to the Wireless debugging page and read its connection address
-with a fresh screenshot before `adb connect`. Do not reuse the pairing port
+Read tool. Use the observed address and code to run `adb pair`. If the connection
+address is already visible behind that dialog, use it; otherwise speak a request
+to return to the Wireless debugging page and read its connection address from a
+fresh screenshot before `adb connect`. Do not reuse the pairing port
 for the debugging connection. Verify the exact device with `adb -s SERIAL shell`
 and `adb devices -l`. Never print pairing codes in your reply or retain them in
 logs. Remove the temporary screenshots and call `phone.stop_capture()` when
 finished; cancellation or stopped sharing needs fresh user authorization.
+After verifying the connection and stopping capture, call
+`phone.notify('无线调试已连接，可以回到 ARLinux 的 OpenCode 继续。')` and speak
+the same concise completion message. Notification taps open OpenCode. Check the
+boolean notification result; if disabled, report this through speech rather
+than claiming a notification was delivered. On failure or timeout, notify the
+actual outcome so the user is not left waiting in Settings. Do not automatically
+bring ARLinux to the foreground while the user is using Settings.
 For this desktop's sandboxed Android apps, use the existing
 ARLinux accessibility, Tasks and screenshot APIs; adb targets the connected
 Android system, not an individual sandbox app.

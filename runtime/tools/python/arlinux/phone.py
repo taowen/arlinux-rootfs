@@ -19,8 +19,17 @@ def request_capture() -> bool:
 
 
 def capture_active() -> bool:
-    """Whether this process currently has an authorized screen-sharing session."""
+    """Whether the Android host has an authorized screen-sharing session."""
     return _request({'operation': 'phone-capture-status'})['active']
+
+
+def capture_status() -> str:
+    """Return idle, pending, starting, active, denied, stopped or failed.
+
+    Pending means the system consent dialog is open; denied means the user
+    cancelled. State is session-local and resets to idle if the host restarts.
+    """
+    return _request({'operation': 'phone-capture-status'})['state']
 
 
 def stop_capture() -> None:

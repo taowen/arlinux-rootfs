@@ -119,8 +119,10 @@ whole-screen sharing and manually open the pairing-code page, call
 `phone.request_capture()` while ARLinux is visible, and wait for consent.
 Use short spoken guidance (`arlinux.speak`) because the user will leave OpenCode.
 Wait for the actual pairing dialog in screenshots; no fixed delay proves the
-user has reached it. Use a bounded wait and stop if consent is cancelled or
-sharing ends. Never assume that enabling wireless debugging grants root.
+user has reached it. Use a bounded wait and inspect `phone.capture_status()` to
+distinguish pending consent from denied, failed or stopped sharing. Stop on
+cancellation; do not immediately request consent again. Never assume enabling
+wireless debugging grants root.
 Use it from the shell when the user asks to work with an Android device.
 Inspect `adb devices -l` and select the intended device with `adb -s SERIAL`.
 Installing adb does not enable Android debugging or authorize a device: wireless

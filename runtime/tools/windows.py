@@ -43,123 +43,6 @@ def runtime_storage():
     return shared.directory('windows-bionic')
 
 
-def validate(root):
-    root = root.resolve()
-    metadata = json.loads((root/'bionic-runtime.json').read_text())
-    if metadata.get('protocol') != 1 or metadata.get('libc') != 'bionic':
-        raise ValueError('Only Bionic Wine bundles are supported')
-    files = metadata['files']
-    for name, expected in files.items():
-        if not isinstance(name, str) or not isinstance(expected, str) or not re.fullmatch('[0-9a-f]{64}', expected):
-            raise ValueError('Invalid Bionic file checksum')
-        path = root/name
-        if not path.resolve().is_relative_to(root):
-            raise ValueError('Runtime file escapes the bundle')
-        if digest(path) != expected:
-            raise ValueError(f'Bionic bundle checksum mismatch: {name}')
-    return metadata
-
-
-def runtime_url(url, filename):
-    return bool(re.fullmatch(r'https://github\.com/taowen/(?:wine|FEX|dxvk|arlinux-steamworks|arlinux-windows-integration)'
-                            r'/releases/download/[^/]+/'+re.escape(filename), url))
-
-
-def install_component(name, source, expected):
-    """Install only one checksum-addressed producer into the immutable store."""
-    if not re.fullmatch('[0-9a-f]{64}', expected) or digest(source) != expected:
-        raise ValueError('Runtime producer SHA-256 mismatch')
-    descriptor = json.loads(source.read_text())
-    identity = descriptor['sha256'] if descriptor.get('name') == name else expected
-    if not re.fullmatch('[0-9a-f]{64}', identity):
-        raise ValueError('Invalid runtime archive identity')
-    home = runtime_storage()/'components'/name
-    home.mkdir(parents=True, exist_ok=True)
-    destination = home/identity
-    with shared.locked(home/'install.lock'):
-        if destination.is_dir():
-            return destination
-        if descriptor.get('kind') == 'arlinux-bionic-components' and descriptor.get('format') == 1:
-            archives = descriptor['components']
-            metadata = descriptor['runtime']
-        elif descriptor.get('name') == name:
-            archives = [descriptor]
-            metadata = None
-        else:
-            raise ValueError('Expected one runtime producer: '+name)
-        with tempfile.TemporaryDirectory(prefix='install-', dir=home) as temporary:
-            stage = Path(temporary)/'runtime'
-            stage.mkdir()
-            seen = set()
-            for item in archives:
-                checksum = item['sha256']
-                asset = item.get('asset', item['file'])
-                if (not re.fullmatch('[0-9a-f]{64}', checksum)
-                        or not runtime_url(item['url'], asset)):
-                    raise ValueError('Invalid runtime component archive')
-                print('Preparing runtime component: '+name, flush=True)
-                archive = shared.download(item['url'], checksum, '.tar.gz', progress=False)
-                if item.get('bytes') is not None and archive.stat().st_size != item['bytes']:
-                    raise ValueError('Runtime component size mismatch: '+name)
-                with tarfile.open(archive, 'r:*') as bundle:
-                    for member in bundle:
-                        path = member.name
-                        if path == 'bionic-runtime.json':
-                            if metadata is not None or not member.isfile() or member.size > 4*1024*1024:
-                                raise ValueError('Invalid embedded runtime metadata')
-                            metadata = json.load(bundle.extractfile(member))
-                            continue
-                        if (path in seen or '\\' in path or ':' in path
-                                or any(part in ('', '.', '..') for part in path.split('/'))
-                                or member.isdir()):
-                            raise ValueError('Unsafe or duplicate runtime path: '+path)
-                        seen.add(path)
-                        bundle.extract(member, stage, filter='data')
-            if not metadata or metadata.get('protocol') != 1 or metadata.get('libc') != 'bionic':
-                raise ValueError('Expected Bionic runtime metadata')
-            # Legacy delivery archives may carry a product-wide pairing token.
-            # Component releases have independent lifetimes; it is not a dependency.
-            metadata.pop('compatibility', None)
-            (stage/'bionic-runtime.json').write_text(json.dumps(metadata)+'\n')
-            validate(stage)
-            stage.rename(destination)
-    print('Installed runtime component: '+name+' '+expected[:12], flush=True)
-    return destination
-
-
-def ensure_component(row):
-    name = row[0]
-    if not re.fullmatch('[a-z0-9_-]+', name):
-        raise ValueError('Invalid runtime producer name')
-    overrides = os.environ.get('ARLINUX_WINE_COMPONENTS')
-    override = Path(overrides)/(name+'.json') if overrides else None
-    if override is not None and override.is_file():
-        expected = json.loads(override.read_text())['sha256']
-        return install_component(name, shared.directory('downloads')/(expected+'.json'), expected)
-    state = storage()/'components'/(name+'.json')
-    try:
-        selected = json.loads(state.read_text())
-        age = time.time()-selected['checkedAt']
-        root = runtime_storage()/'components'/name/selected['cache']
-        if 0 <= age < 3600 and root.is_dir() and selected['endpoint'] == row:
-            return root
-    except (FileNotFoundError, ValueError, KeyError, TypeError):
-        pass
-    item = release_asset(row)
-    encoded = (json.dumps(item, sort_keys=True)+'\n').encode()
-    expected = hashlib.sha256(encoded).hexdigest()
-    source = shared.directory('downloads')/(expected+'.json')
-    with shared.locked(source.with_suffix('.lock')):
-        source.write_bytes(encoded)
-    root = install_component(name, source, expected)
-    state.parent.mkdir(parents=True, exist_ok=True)
-    with shared.locked(state.with_suffix('.lock')):
-        temporary = state.with_suffix('.tmp')
-        temporary.write_text(json.dumps(dict(sha256=expected, cache=root.name, checkedAt=time.time(), endpoint=row))+'\n')
-        temporary.replace(state)
-    return root
-
-
 def runtime(identity=None):
     if identity is None:
         identity = (storage()/'runtime-id').read_text().strip()
@@ -172,78 +55,110 @@ def runtime(identity=None):
     return root
 
 
-def ensure_runtime():
-    """Resolve producers independently and reference their immutable files."""
-    from concurrent.futures import ThreadPoolExecutor
-    rows = [line.split('\t') for line in MANIFEST.read_text().splitlines()
-            if line.strip() and not line.startswith('#')]
-    if not rows or any(len(row) != 4 for row in rows) or len({r[0] for r in rows}) != len(rows):
-        raise ValueError('Invalid runtime release endpoints')
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        roots = list(pool.map(ensure_component, rows))
-    metadata = {}
-    for root in roots:
-        for key, value in json.loads((root/'bionic-runtime.json').read_text()).items():
-            if key == 'files':
-                target = metadata.setdefault(key, {})
-                for field, content in value.items():
-                    if field in target:
-                        raise ValueError('Conflicting runtime ownership: '+field)
-                    target[field] = content
-            elif key in ('sources', 'compatibility', 'originalSources'):
-                # Source provenance stays with each producer. Independent PE
-                # architectures can legitimately originate from different commits.
-                continue
-            elif key in metadata and metadata[key] != value:
-                raise ValueError('Conflicting runtime metadata: '+key)
-            else:
-                metadata[key] = value
-    encoded = (json.dumps(metadata, sort_keys=True)+'\n').encode()
-    identity = hashlib.sha256(Path(__file__).read_bytes()+b'\0'+encoded).hexdigest()
-    home = runtime_storage()
-    destination = home/identity
+def _installer():
+    """Fetch the one Wine-owned bootstrap; component policy lives in that package."""
+    import types
+    import sys
+    rows = [line.split('\t') for line in MANIFEST.read_text().splitlines() if line.strip() and not line.startswith('#')]
+    if len(rows) != 1 or len(rows[0]) != 4:
+        raise ValueError('Expected one Wine installer endpoint')
+    name = 'wine-installer'
+    state = storage()/'installer.json'
+    selected = None
+    overrides = os.environ.get('ARLINUX_WINE_COMPONENTS')
+    override = Path(overrides)/(name+'.json') if overrides else None
+    if override is not None and override.is_file():
+        expected = json.loads(override.read_text())['sha256']
+        source = shared.directory('downloads')/(expected+'.json')
+        if not re.fullmatch('[0-9a-f]{64}', expected) or digest(source) != expected:
+            raise ValueError('Wine installer descriptor checksum mismatch')
+        selected = json.loads(source.read_text())
+    else:
+        try:
+            cached = json.loads(state.read_text())
+            if cached['endpoint'] == rows[0] and 0 <= time.time()-cached['checkedAt'] < 3600:
+                selected = cached['asset']
+        except (FileNotFoundError, ValueError, KeyError, TypeError):
+            pass
+        if selected is None:
+            selected = _bootstrap_release_asset(rows[0])
+        expected = selected['sha256']
+    identity = selected['sha256'] if selected.get('name') == name else expected
+    if not re.fullmatch('[0-9a-f]{64}', identity):
+        raise ValueError('Invalid Wine installer identity')
+    home = runtime_storage()/'components'/name
+    home.mkdir(parents=True, exist_ok=True)
+    root = home/identity
     with shared.locked(home/'install.lock'):
-        if not destination.is_dir():
-            with tempfile.TemporaryDirectory(prefix='view-', dir=home) as temporary:
-                stage = Path(temporary)/'runtime'
+        if not root.is_dir():
+            if selected.get('kind') == 'arlinux-bionic-components' and selected.get('format') == 1:
+                archives, metadata = selected['components'], selected['runtime']
+            elif selected.get('name') == name:
+                archives, metadata = [selected], None
+            else:
+                raise ValueError('Invalid Wine installer descriptor')
+            with tempfile.TemporaryDirectory(prefix='bootstrap-', dir=home) as temporary:
+                stage = Path(temporary)/'installer'
                 stage.mkdir()
-                for root in roots:
-                    for source in root.rglob('*'):
-                        relative = source.relative_to(root)
-                        if relative.as_posix() == 'bionic-runtime.json' or source.is_dir() and not source.is_symlink():
-                            continue
-                        target = stage/relative
-                        target.parent.mkdir(parents=True, exist_ok=True)
-                        if source.is_symlink():
-                            target.symlink_to(os.readlink(source))
-                        elif root.parent.name == 'wine-bionic':
-                            # Wine derives its shared-data directory from the
-                            # real paths of wineserver and ntdll.so. Keep this
-                            # producer's files in the launch view; other, much
-                            # larger producers remain linked to their cache.
-                            shutil.copy2(source, target)
-                        else:
-                            # Android denies app_data_file hardlinks. Keep the
-                            # native host's paths usable without tawcroot's
-                            # private hardlink emulation or copying runtime bytes.
-                            target.symlink_to(os.path.relpath(source, destination/relative.parent))
-                (stage/'bionic-runtime.json').write_bytes(encoded)
-                stage.rename(destination)
-    pointer = storage()/'runtime-id'
-    pointer.parent.mkdir(parents=True, exist_ok=True)
-    with shared.locked(pointer.with_suffix('.lock')):
-        temporary = pointer.with_suffix('.tmp')
-        temporary.write_text(identity+'\n')
-        temporary.replace(pointer)
-    return runtime(identity)
+                seen = set()
+                for item in archives:
+                    asset = item.get('asset', item['file'])
+                    if (not re.fullmatch('[0-9a-f]{64}', item['sha256']) or not re.fullmatch(
+                        r'https://github\.com/taowen/wine/releases/download/[^/]+/'+re.escape(asset), item['url'])):
+                        raise ValueError('Invalid Wine installer archive')
+                    archive = shared.download(item['url'], item['sha256'], '.tar.gz', progress=False)
+                    if item.get('bytes') is not None and archive.stat().st_size != item['bytes']:
+                        raise ValueError('Wine installer size mismatch')
+                    with tarfile.open(archive, 'r:*') as bundle:
+                        for member in bundle:
+                            if member.name == 'bionic-runtime.json':
+                                if metadata is not None or not member.isfile() or member.size > 4*1024*1024:
+                                    raise ValueError('Invalid installer metadata')
+                                metadata = json.load(bundle.extractfile(member))
+                                continue
+                            if (member.name in seen or '\' in member.name or ':' in member.name or
+                                any(part in ('', '.', '..') for part in member.name.split('/')) or
+                                not member.isfile()):
+                                raise ValueError('Unsafe Wine installer archive path')
+                            seen.add(member.name)
+                            bundle.extract(member, stage, filter='data')
+                if not metadata or metadata.get('installerProtocol') != 1:
+                    raise ValueError('Unsupported Wine installer protocol')
+                (stage/'bionic-runtime.json').write_text(json.dumps(metadata)+'\n')
+                stage.rename(root)
+        metadata = json.loads((root/'bionic-runtime.json').read_text())
+        if metadata.get('installerProtocol') != 1:
+            raise ValueError('Unsupported Wine installer protocol')
+        for relative, checksum in metadata['files'].items():
+            file = root/relative
+            if (not file.resolve().is_relative_to(root.resolve()) or not re.fullmatch('[0-9a-f]{64}', checksum)
+                or digest(file) != checksum):
+                raise ValueError('Wine installer file checksum mismatch')
+    if override is None or not override.is_file():
+        state.parent.mkdir(parents=True, exist_ok=True)
+        with shared.locked(state.with_suffix('.lock')):
+            pending = state.with_suffix('.tmp')
+            pending.write_text(json.dumps(dict(endpoint=rows[0], checkedAt=time.time(), asset=selected))+'\n')
+            pending.replace(state)
+    module_name = 'arlinux_wine_installer_'+identity
+    if module_name not in sys.modules:
+        source = root/'files/share/arlinux/wine-installer/runtime.py'
+        module = types.ModuleType(module_name)
+        module.__file__ = str(source)
+        # Do not create bytecode files inside an immutable downloaded component.
+        exec(compile(source.read_bytes(), str(source), 'exec'), module.__dict__)
+        sys.modules[module_name] = module
+    return sys.modules[module_name]
 
 
-def release_asset(row):
+def ensure_runtime():
+    return _installer().ensure_runtime()
+
+
+def _bootstrap_release_asset(row):
     name, repository, tag, filename = row
-    if (not re.fullmatch('[a-z0-9_-]+', name)
-            or not re.fullmatch('taowen/(wine|FEX|dxvk|arlinux-steamworks|arlinux-windows-integration)', repository)
-            or tag != 'arlinux-'+name+'-latest' or filename != 'runtime.tar.gz'):
-        raise ValueError('Invalid runtime release endpoint')
+    if row != ['wine-installer', 'taowen/wine', 'arlinux-wine-installer-latest', 'runtime.tar.gz']:
+        raise ValueError('Invalid Wine installer endpoint')
     endpoint = f'https://api.github.com/repos/{repository}/releases/tags/{tag}'
     try:
         release = json.loads(shared.github_metadata(endpoint))
@@ -362,7 +277,7 @@ def _host_request(payload, timeout=10, stdio=False):
 
 
 def initialize(root, prefix, env=None):
-    # Android owns builtin wineboot and matching DXVK setup.
+    # The native host invokes the Wine-owned initializer before this command.
     run(root, prefix, 'cmd.exe', ['/c', 'exit', '0'], env=env, check=True)
 
 

@@ -1,12 +1,2 @@
-# Producer	GitHub repository	Fixed release tag	Asset (digest supplied by GitHub)
-wine-bionic	taowen/wine	arlinux-wine-bionic-latest	runtime.tar.gz
-wine-pe-aarch64	taowen/wine	arlinux-wine-pe-aarch64-latest	runtime.tar.gz
-wine-pe-x86_64	taowen/wine	arlinux-wine-pe-x86_64-latest	runtime.tar.gz
-wine-pe-i386	taowen/wine	arlinux-wine-pe-i386-latest	runtime.tar.gz
-fex	taowen/FEX	arlinux-fex-latest	runtime.tar.gz
-dxvk	taowen/dxvk	arlinux-dxvk-latest	runtime.tar.gz
-windows-fonts	taowen/wine	arlinux-windows-fonts-latest	runtime.tar.gz
-wine-addons	taowen/wine	arlinux-wine-addons-latest	runtime.tar.gz
-steamworks	taowen/arlinux-steamworks	arlinux-steamworks-latest	runtime.tar.gz
-windows-accessibility	taowen/arlinux-windows-integration	arlinux-windows-accessibility-latest	runtime.tar.gz
-windows-tray	taowen/arlinux-windows-integration	arlinux-windows-tray-latest	runtime.tar.gz
+# Bootstrap	GitHub repository	Fixed release	Asset
+wine-installer	taowen/wine	arlinux-wine-installer-latest	runtime.tar.gz

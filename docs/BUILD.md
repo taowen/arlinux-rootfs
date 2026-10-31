@@ -2,7 +2,9 @@
 
 This repository builds Linux distributions and their native Linux GPU libraries.
 It has no Bionic Wine source, build graph, assembly or publishing pipeline.
-Application launchers download the independently published runtime when needed.
+Application launchers download the independently published runtime when needed. Guest Tools bootstraps only the independently
+published Wine installer; Wine owns subsequent component selection, downloads
+and prefix installation. The distribution does not maintain a Wine version list.
 
 The `third_party/libhybris` submodule follows libhybris's single `arlinux`
 integration branch, shared with Wine. Keep the two consumers pinned to the same

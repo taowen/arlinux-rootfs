@@ -104,7 +104,7 @@ def _installer():
                 for item in archives:
                     asset = item.get('asset', item['file'])
                     if (not re.fullmatch('[0-9a-f]{64}', item['sha256']) or not re.fullmatch(
-                        r'https://github\.com/taowen/wine/releases/download/[^/]+/'+re.escape(asset), item['url'])):
+                        r'https://github[.]com/taowen/wine/releases/download/[^/]+/'+re.escape(asset), item['url'])):
                         raise ValueError('Invalid Wine installer archive')
                     archive = shared.download(item['url'], item['sha256'], '.tar.gz', progress=False)
                     if item.get('bytes') is not None and archive.stat().st_size != item['bytes']:
@@ -116,7 +116,7 @@ def _installer():
                                     raise ValueError('Invalid installer metadata')
                                 metadata = json.load(bundle.extractfile(member))
                                 continue
-                            if (member.name in seen or '\' in member.name or ':' in member.name or
+                            if (member.name in seen or chr(92) in member.name or ':' in member.name or
                                 any(part in ('', '.', '..') for part in member.name.split('/')) or
                                 not member.isfile()):
                                 raise ValueError('Unsafe Wine installer archive path')

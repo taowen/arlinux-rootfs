@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Install repository-hosted official ARM64 DEBs on first use, then launch them."""
 import argparse
+import configparser
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
@@ -27,7 +28,7 @@ class Application:
 
 APPS = {
     'grok-bot': Application('grok-bot', '/usr/bin/grok-bot', 'grok-bot.desktop',
-                            flags=('--force-renderer-accessibility',)),
+                            flags=('--force-renderer-accessibility',), dependencies=('firefox-esr',)),
     'qq': Application('linuxqq', '/opt/QQ/qq', 'qq.desktop', flags=('--force-renderer-accessibility',)),
     # The vendor DEB omits NSS. Its Qt build scales the Wayland surface but
     # leaves its painted controls at 1x, producing transparent input regions.
@@ -80,13 +81,18 @@ def main() -> None:
             install(args.application, app)
             if not installed(app):
                 raise RuntimeError('Application installation did not complete')
-    # Keep the on-demand entry as the single Apps entry after APT installs the
-    # vendor shortcut. Preserve any existing user override.
+    # Hide the duplicate menu entry, but retain the vendor's URL handlers for
+    # browser sign-in callbacks. Preserve any existing user override.
     applications = Path(os.environ.get('XDG_DATA_HOME', Path.home()/'.local/share'))/'applications'
     applications.mkdir(parents=True, exist_ok=True)
+    source = Path('/usr/share/applications') / app.desktop
+    entry = configparser.RawConfigParser(interpolation=None)
+    entry.optionxform = str
+    entry.read(source)
+    entry['Desktop Entry']['NoDisplay'] = 'true'
     try:
-        with (applications/app.desktop).open('x') as entry:
-            entry.write('[Desktop Entry]\nType=Application\nHidden=true\n')
+        with (applications/app.desktop).open('x') as output:
+            entry.write(output, space_around_delimiters=False)
     except FileExistsError:
         pass
     env = desktop_bus.environment(os.environ)

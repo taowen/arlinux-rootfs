@@ -28,7 +28,7 @@ class Application:
 
 APPS = {
     'grok-bot': Application('grok-bot', '/usr/bin/grok-bot', 'grok-bot.desktop',
-                            flags=('--force-renderer-accessibility',), dependencies=('firefox-esr',)),
+                            flags=('--force-renderer-accessibility',)),
     'qq': Application('linuxqq', '/opt/QQ/qq', 'qq.desktop', flags=('--force-renderer-accessibility',)),
     # The vendor DEB omits NSS. Its Qt build scales the Wayland surface but
     # leaves its painted controls at 1x, producing transparent input regions.

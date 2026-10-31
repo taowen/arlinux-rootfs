@@ -93,9 +93,11 @@ own online features still require networking.
 WeChat also installs its undeclared NSS dependency. Applications select their
 native display backend from the desktop session environment. WeChat uses its
 native Qt surface size because its bundled Qt paints incorrectly at HiDPI scale.
-Grok Bot also installs Firefox ESR for its browser sign-in flow. Vendor menu
-shortcuts are hidden with `NoDisplay`, retaining their URL handlers for login
-callbacks; the on-demand shortcut remains visible in Apps.
+The default HTTP/HTTPS handler opens the Android host's WebView browser through
+standard `xdg-open` associations, without installing a Linux browser. It requires
+a host with the browser endpoint. Vendor menu shortcuts are hidden with
+`NoDisplay`, retaining their URL handlers for login callbacks; the on-demand
+shortcut remains visible in Apps.
 The same release supplies Android Pad Apps as `wps-pad.apk` and `capcut-pad.apks`.
 The Android host owns their catalog and private sandbox installation. The latter
 is a flat ZIP of original signed APKs, including `base.apk` and all required

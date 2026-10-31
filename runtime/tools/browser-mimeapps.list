@@ -1,0 +1,3 @@
+[Default Applications]
+x-scheme-handler/http=arlinux-browser.desktop
+x-scheme-handler/https=arlinux-browser.desktop

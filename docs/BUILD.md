@@ -38,6 +38,15 @@ Each product has its own content identity, publication, capsule and download cac
 Changes to these application scripts do not invalidate the base rootfs.
 The OpenCode launcher rewrites its managed `AGENTS.md` section on every start and
 appends `/etc/arlinux/opencode-AGENTS.md` when a distribution provides one.
+First-use OpenCode installation also installs native ADB from the distribution
+repository (`adb` on Debian, `android-tools` on Arch). Later launches reuse the
+installed tools without refreshing package databases. Device debugging,
+authorization and wireless pairing remain explicit user operations.
+The `arlinux.phone` API provides separate, user-authorized main-screen capture
+through the Android host's MediaProjection foreground service. The user must
+accept screen sharing while ARLinux is visible, then can open system Settings
+while OpenCode observes screenshots in the background. Sharing ends from the
+notification, system controls or `phone.stop_capture()`; consent is never cached.
 The shared right-edge OpenCode voice helper lives in `runtime/tools/guest` and
 ships with Guest Tools for every distribution, including Yibu and Classic. It
 waits for the actual AT-SPI composer within one bounded startup deadline, not

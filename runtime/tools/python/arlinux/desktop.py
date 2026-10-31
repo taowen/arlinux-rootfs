@@ -64,6 +64,10 @@ def screenshot(path: str | os.PathLike, *, max_size: int = 1280) -> Path:
     # PNG text metadata immediately after IHDR keeps each image self-contained;
     # no sidecar, runtime table or guessed viewer scale is needed for input.
     data = data[:33] + struct.pack('!I', len(text)) + chunk + struct.pack('!I', zlib.crc32(chunk)) + data[33:]
+    return _save_png(data, response['width'], response['height'], path)
+
+
+def _save_png(data, width, height, path):
     target = Path(path).expanduser().absolute()
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = None
@@ -71,8 +75,8 @@ def screenshot(path: str | os.PathLike, *, max_size: int = 1280) -> Path:
         with tempfile.NamedTemporaryFile(dir=target.parent, prefix='.screenshot-', delete=False) as output:
             temporary = Path(output.name)
             output.write(data)
-        if dimensions(temporary) != (response['width'], response['height']):
-            raise RuntimeError('Desktop screenshot dimensions do not match its response')
+        if dimensions(temporary) != (width, height):
+            raise RuntimeError('Screenshot dimensions do not match its response')
         os.replace(temporary, target)
     finally:
         if temporary is not None:

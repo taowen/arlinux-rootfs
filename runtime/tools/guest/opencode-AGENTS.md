@@ -110,6 +110,31 @@ vision-capable model; do not claim that reading PNG bytes is visual inspection.
 Screenshots may contain private documents: capture only what the task needs,
 keep them local, and never upload or share them without the user's instruction.
 
+The OpenCode installer also installs the distribution's native `adb` command.
+Use it from the shell when the user asks to work with an Android device.
+Inspect `adb devices -l` and select the intended device with `adb -s SERIAL`.
+Installing adb does not enable Android debugging or authorize a device: wireless
+debugging requires the user's device address and, when requested, pairing code
+for `adb pair HOST:PAIRING_PORT` followed by `adb connect HOST:DEBUGGING_PORT`.
+The two ports may differ. Do not assume a connection or start pairing without
+the user's request. To read a pairing dialog with the user's permission, use
+`from arlinux import phone`. Read `/usr/lib/arlinux/python/arlinux/phone.py`:
+`phone.request_capture()` opens Android screen-sharing authorization while
+ARLinux is visible; wait for `phone.capture_active()` and ask the user to open
+Settings → Developer options → Wireless debugging → Pair device with pairing
+code. Keep that dialog open. While ARLinux is in the background, call
+`phone.screenshot('/tmp/phone-pairing.png')` and inspect the PNG with your image
+Read tool. Use the observed address and code to run `adb pair`, then ask the
+user to return to the Wireless debugging page and read its connection address
+with a fresh screenshot before `adb connect`. Do not reuse the pairing port
+for the debugging connection. Verify the exact device with `adb -s SERIAL shell`
+and `adb devices -l`. Never print pairing codes in your reply or retain them in
+logs. Remove the temporary screenshots and call `phone.stop_capture()` when
+finished; cancellation or stopped sharing needs fresh user authorization.
+For this desktop's sandboxed Android apps, use the existing
+ARLinux accessibility, Tasks and screenshot APIs; adb targets the connected
+Android system, not an individual sandbox app.
+
 The desktop session owns its D-Bus and AT-SPI buses, compositor, input method
 and app runtimes. Never stop, delete or replace them: do not remove bus sockets
 under `$XDG_RUNTIME_DIR`, start your own `dbus-daemon` or `at-spi-bus-launcher`,

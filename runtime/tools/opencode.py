@@ -139,14 +139,15 @@ def install():
         subprocess.run(['sudo', 'apt-get', 'update'], env=env, check=True)
         dependencies = subprocess.check_output(
             ['dpkg-deb', '-f', str(package), 'Depends'], text=True).strip()
-        if dependencies:
-            subprocess.run(['sudo', 'apt-get', 'satisfy', '-y', '--no-install-recommends',
-                            dependencies], env=env, check=True)
+        dependencies = ', '.join(filter(None, (dependencies, 'adb')))
+        subprocess.run(['sudo', 'apt-get', 'satisfy', '-y', '--no-install-recommends',
+                        dependencies], env=env, check=True)
     else:
         # The official ARM64 RPM contains an ordinary Linux application payload.
         subprocess.run(['sudo', 'pacman', '-S', '--needed', '--noconfirm',
                         'libarchive', 'gtk3', 'nss', 'libxss', 'libxtst', 'libsecret',
-                        'alsa-plugins', 'libpulse', 'cups', 'libdrm', 'mesa'], check=True)
+                        'alsa-plugins', 'libpulse', 'cups', 'libdrm', 'mesa',
+                        'android-tools'], check=True)
     # Share only the vendor's self-contained application, not distro libraries.
     payloads = shared.directory('opencode')
     destination = payloads / expected

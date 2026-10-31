@@ -144,13 +144,15 @@ for the debugging connection. Verify the exact device with `adb -s SERIAL shell`
 and `adb devices -l`. Never print pairing codes in your reply or retain them in
 logs. Remove the temporary screenshots and call `phone.stop_capture()` when
 finished; cancellation or stopped sharing needs fresh user authorization.
-After verifying the connection and stopping capture, call
-`phone.notify('无线调试已连接，可以回到 ARLinux 的 OpenCode 继续。')` and speak
-the same concise completion message. Notification taps open OpenCode. Check the
-boolean notification result; if disabled, report this through speech rather
-than claiming a notification was delivered. On failure or timeout, notify the
-actual outcome so the user is not left waiting in Settings. Do not automatically
-bring ARLinux to the foreground while the user is using Settings.
+After verifying the connection, remove temporary pairing screenshots, stop
+capture and wait until sharing is inactive. Call `phone.open_opencode(serial)`
+with that exact verified ADB connection to return ARLinux to the foreground and
+focus OpenCode automatically. It uses standard `adb shell am start` with the
+host's actual package; do not guess Debug/Release package names. Speak a concise
+completion message and verify the OpenCode window is focused. Do not send a
+completion notification or leave the user waiting in Settings. On failure or
+timeout, speak the actual outcome and stop; only return automatically after
+verified shell access, not while the user is still completing setup.
 For this desktop's sandboxed Android apps, use the existing
 ARLinux accessibility, Tasks and screenshot APIs; adb targets the connected
 Android system, not an individual sandbox app.

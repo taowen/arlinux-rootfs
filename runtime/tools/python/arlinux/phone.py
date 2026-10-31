@@ -5,6 +5,7 @@ The Android host owns MediaProjection and its visible stop-sharing notification.
 """
 
 import base64
+import subprocess
 from .desktop import _request, _save_png
 
 
@@ -37,15 +38,26 @@ def stop_capture() -> None:
     _request({'operation': 'phone-capture-stop'})
 
 
-def notify(message: str, *, title: str = 'OpenCode') -> bool:
-    """Post a phone notification; tapping it returns to ARLinux and opens OpenCode.
+def open_opencode(serial: str) -> str:
+    """Return this host to the foreground and focus OpenCode using authorized ADB.
 
-    Works independently of screen sharing, including after stop_capture().
-    Returns false if app or channel notifications are disabled. Use speak()
-    as an audible fallback. Never include pairing codes or other secrets.
-    Delivery does not imply the user has read the notification.
+    Pass the exact ADB serial whose identity and shell access you verified.
+    This uses ordinary `adb shell am start`; it neither pairs nor grants access.
+    Stop screen sharing before returning. The host supplies its package so the
+    same command handles Debug and Release. Returns Android's launch output;
+    verify the resulting foreground window instead of assuming input delivery.
     """
-    return _request({'operation': 'phone-notify', 'title': title, 'message': message})['posted']
+    if not isinstance(serial, str) or not serial or any(c.isspace() for c in serial):
+        raise ValueError('An explicit ADB device serial is required')
+    package = _request({'operation': 'phone-capture-status'})['package']
+    result = subprocess.run(['adb', '-s', serial, 'shell', 'am', 'start',
+                             '-n', package + '/io.taowen.arlinux.ArlinuxActivity',
+                             '--ez', 'io.taowen.arlinux.extra.OPEN_OPENCODE', 'true'],
+                            check=True, capture_output=True, text=True, timeout=15)
+    output = result.stdout + result.stderr
+    if 'Error:' in output or 'Exception' in output:
+        raise RuntimeError(output.strip())
+    return output.strip()
 
 
 def screenshot(path, *, max_size: int = 1280):

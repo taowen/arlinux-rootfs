@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Grok Bot
+Comment=Download and install the Cursor desktop agent on first use, then launch it
+Comment[zh_CN]=首次点击下载安装 Cursor 提供的 Grok Bot 桌面智能体，之后直接启动
+TryExec=/usr/bin/apt-get
+Exec=arlinux-popular-app grok-bot %U
+Icon=/usr/share/pixmaps/arlinux-grok-bot.png
+Terminal=true
+Categories=Development;
+StartupWMClass=grok-bot
+StartupNotify=false
+MimeType=x-scheme-handler/grokbot;x-scheme-handler/sand;

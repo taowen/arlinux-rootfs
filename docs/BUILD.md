@@ -83,7 +83,8 @@ merged. Vendor bottle registries, Linux Wine DLL patches, dynamic launch scripts
 and packages requiring a vendor setup program are not supported. Static DLL
 overrides apply only to that application's launch.
 
-Guest Tools provides QQ and WeChat entries for ARM64 Debian-family guests.
+Guest Tools provides QQ, WeChat and Grok Bot (from Cursor's Bot download page)
+entries for ARM64 Debian-family guests.
 First launch downloads the official DEB mirrored in the fixed
 [`popular-apps` release](https://github.com/taowen/arlinux-rootfs/releases/tag/popular-apps),
 verifies the release's `SHA256SUMS`, and installs it and its dependencies with
@@ -100,7 +101,7 @@ installers. Both launchers read current digests from `SHA256SUMS` rather than
 requiring a code update. Preserve every release asset's checksum when updating:
 
 ```powershell
-$assets = 'qq-arm64.deb', 'wechat-arm64.deb', 'wps-pad.apk', 'capcut-pad.apks'
+$assets = 'qq-arm64.deb', 'wechat-arm64.deb', 'grok-bot-arm64.deb', 'wps-pad.apk', 'capcut-pad.apks'
 $sums = $assets | ForEach-Object { "$( (Get-FileHash $_ -Algorithm SHA256).Hash.ToLowerInvariant() )  $_" }
 [IO.File]::WriteAllText((Join-Path $PWD 'SHA256SUMS'), ($sums -join "`n") + "`n")
 gh release upload popular-apps @assets --clobber --repo taowen/arlinux-rootfs

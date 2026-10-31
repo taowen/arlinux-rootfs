@@ -11,6 +11,7 @@ import subprocess
 import sys
 
 import desktop_bus
+import agent_context
 import shared
 
 DOWNLOAD = 'https://github.com/taowen/arlinux-rootfs/releases/download/popular-apps/'
@@ -28,7 +29,7 @@ class Application:
 
 APPS = {
     'grok-bot': Application('grok-bot', '/usr/bin/grok-bot', 'grok-bot.desktop',
-                            flags=('--force-renderer-accessibility',)),
+                            flags=('--force-renderer-accessibility',), dependencies=('adb',)),
     'qq': Application('linuxqq', '/opt/QQ/qq', 'qq.desktop', flags=('--force-renderer-accessibility',)),
     # The vendor DEB omits NSS. Its Qt build scales the Wayland surface but
     # leaves its painted controls at 1x, producing transparent input regions.
@@ -95,7 +96,8 @@ def main() -> None:
             entry.write(output, space_around_delimiters=False)
     except FileExistsError:
         pass
-    env = desktop_bus.environment(os.environ)
+    env = (agent_context.environment(os.environ) if args.application == 'grok-bot'
+           else desktop_bus.environment(os.environ))
     env.update(app.environment)
     with (cache/(args.application + '.log')).open('ab') as log:
         subprocess.Popen([app.binary, *app.flags, *args.arguments], env=env,

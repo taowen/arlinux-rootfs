@@ -47,13 +47,27 @@ def open_opencode(serial: str) -> str:
     same command handles Debug and Release. Returns Android's launch output;
     verify the resulting foreground window instead of assuming input delivery.
     """
+    return _open_host(serial, opencode=True)
+
+
+def open_desktop(serial: str) -> str:
+    """Return ARLinux to the foreground through an explicitly verified ADB serial.
+
+    Stop sharing first, then use tasks.focus(saved_window_id) to restore the
+    requesting assistant. This does not pair, authorize or start a new agent.
+    """
+    return _open_host(serial, opencode=False)
+
+
+def _open_host(serial: str, *, opencode: bool) -> str:
     if not isinstance(serial, str) or not serial or any(c.isspace() for c in serial):
         raise ValueError('An explicit ADB device serial is required')
     package = _request({'operation': 'phone-capture-status'})['package']
-    result = subprocess.run(['adb', '-s', serial, 'shell', 'am', 'start',
-                             '-n', package + '/io.taowen.arlinux.ArlinuxActivity',
-                             '--ez', 'io.taowen.arlinux.extra.OPEN_OPENCODE', 'true'],
-                            check=True, capture_output=True, text=True, timeout=15)
+    command = ['adb', '-s', serial, 'shell', 'am', 'start',
+               '-n', package + '/io.taowen.arlinux.ArlinuxActivity']
+    if opencode:
+        command += ['--ez', 'io.taowen.arlinux.extra.OPEN_OPENCODE', 'true']
+    result = subprocess.run(command, check=True, capture_output=True, text=True, timeout=15)
     output = result.stdout + result.stderr
     if 'Error:' in output or 'Exception' in output:
         raise RuntimeError(output.strip())

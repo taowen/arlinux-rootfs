@@ -38,6 +38,18 @@ Each product has its own content identity, publication, capsule and download cac
 Changes to these application scripts do not invalidate the base rootfs.
 The OpenCode launcher rewrites its managed `AGENTS.md` section on every start and
 appends `/etc/arlinux/opencode-AGENTS.md` when a distribution provides one.
+Shared agent guidance lives in `runtime/tools/guest/agent-AGENTS.md`; OpenCode's
+own adapter only describes its integration-specific behavior. Other assistants
+can read `arlinux-agent instructions` from their authorized local shell and use
+`arlinux-agent python SCRIPT.py` or `arlinux-agent python -c CODE` to join the
+existing desktop environment. Grok Bot inherits that same environment and
+installs native ADB on first use. Its private skills are managed through its
+supported conversation/skill UI: ask it to read the local instructions and save
+the ARLinux workflow as a private skill. Do not patch its client, edit its private
+databases, bypass local command approval or expose the host socket over TCP.
+`phone.open_desktop(serial)` returns to ARLinux after verified ADB setup; restore
+the requesting assistant with its saved Tasks window ID. OpenCode retains its
+prompt-specific `phone.open_opencode(serial)` adapter.
 First-use OpenCode installation also installs native ADB from the distribution
 repository (`adb` on Debian, `android-tools` on Arch). Later launches reuse the
 installed tools without refreshing package databases. Device debugging,

@@ -13,7 +13,7 @@ import sys
 import tempfile
 from urllib.parse import urlparse
 import shared
-import desktop_bus
+import agent_context
 
 BINARY = Path('/opt/OpenCode/ai.opencode.desktop')
 LAUNCHER = Path('/opt/OpenCode/.arlinux-launch')
@@ -115,7 +115,7 @@ def install_instructions():
                 managed = False
             elif not managed:
                 kept.append(line)
-    sections = [(GUEST / 'opencode-AGENTS.md').read_text().strip()]
+    sections = [agent_context.instructions().strip(), (GUEST / 'opencode-AGENTS.md').read_text().strip()]
     if DISTRIBUTION_AGENTS.is_file():
         sections.append(DISTRIBUTION_AGENTS.read_text().strip())
     text = '\n'.join([*kept, BEGIN, '\n\n'.join(sections), END]) + '\n'
@@ -208,9 +208,8 @@ def main():
     install_instructions()
     # Keep the same accessibility and rendering path for Apps and voice AI.
     # Once preparation finishes, close its terminal without closing the GUI.
-    env = desktop_bus.environment(os.environ)
+    env = agent_context.environment(os.environ)
     # Shell tools import the arlinux helper package shipped with Guest Tools.
-    env['PYTHONPATH'] = os.pathsep.join(filter(None, ('/usr/lib/arlinux/python', env.get('PYTHONPATH'))))
     # Bun's WebAssembly signal setup can terminate syscall-translated guests
     # with SIGSYS. Use OpenCode's upstream portable permission scanner instead.
     # Inline config merges with user settings; keep explicit caller overrides.

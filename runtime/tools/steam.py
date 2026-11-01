@@ -517,11 +517,16 @@ def launch(root, arguments):
             print('Steam HTTPS acceleration unavailable; using direct connections.', flush=True)
     elif relay:
         print('Steam HTTPS acceleration unavailable; using direct connections.', flush=True)
-    # Prepare the Windows compatibility runtime during Steam installation/startup,
-    # before handing control to Valve. Play must not fetch Wine for the first time.
+    # Prepare the same instance prefix used by Play before handing control to
+    # Valve. Downloading components alone does not run the Wine initializer.
     import windows
     print('Preparing Steam Windows compatibility runtime…', flush=True)
-    windows.ensure_runtime()
+    runtime = windows.ensure_runtime()
+    prefix = windows.instance_prefix()
+    print('Initializing the Steam Windows environment…', flush=True)
+    windows.initialize(runtime, prefix)
+    from windows_webview import prepare as prepare_webview
+    prepare_webview(runtime, prefix, {})
     print('Steam Windows compatibility runtime ready.', flush=True)
     os.chdir(root)
     # CLOEXEC releases startup serialization atomically with Valve's exec.

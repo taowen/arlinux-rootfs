@@ -112,26 +112,31 @@ def base_packages(cache):
     # Bookworm's GCC 12 satisfies the GL thunk's GLIBCXX_3.4.29 requirement
     # while staying close to sniper's Debian 11 baseline. Do not mix the
     # desktop's rolling libc with this guest runtime.
-    apt = cache/'apt-bookworm'
-    apt.mkdir(exist_ok=True)
-    packages = apt/'packages'
-    packages.mkdir(exist_ok=True)
-    marker = packages/'complete'
-    if not marker.exists():
-        (apt/'lists/partial').mkdir(parents=True, exist_ok=True)
-        source = apt/'sources.list'
-        chinese = shared.acceleration_enabled()
-        mirror = 'https://mirrors.tuna.tsinghua.edu.cn/debian' if chinese else 'https://deb.debian.org/debian'
-        source.write_text('deb [arch=amd64 signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] '
-                          + mirror + ' bookworm main\n')
-        options = ['-o', 'APT::Architecture=amd64', '-o', 'APT::Architectures=amd64',
-                   '-o', f'Dir::Etc::sourcelist={source}', '-o', 'Dir::Etc::sourceparts=-',
-                   '-o', f'Dir::State::lists={apt / "lists"}', '-o', 'APT::Sandbox::User=root']
-        subprocess.run(['apt-get', *options, 'update'], check=True)
-        subprocess.run(['apt-get', *options, 'download', 'libc6:amd64',
-                        'libgcc-s1:amd64', 'libstdc++6:amd64'], cwd=packages, check=True)
-        marker.touch()
-    return sorted(packages.glob('*.deb'))
+    result = []
+    for architecture in ('amd64', 'i386'):
+        apt = cache/('apt-bookworm-'+architecture)
+        apt.mkdir(exist_ok=True)
+        packages = apt/'packages'
+        packages.mkdir(exist_ok=True)
+        marker = packages/'complete'
+        if not marker.exists():
+            (apt/'lists/partial').mkdir(parents=True, exist_ok=True)
+            source = apt/'sources.list'
+            chinese = shared.acceleration_enabled()
+            mirror = 'https://mirrors.tuna.tsinghua.edu.cn/debian' if chinese else 'https://deb.debian.org/debian'
+            source.write_text('deb [arch='+architecture+' signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] '
+                              + mirror + ' bookworm main\n')
+            options = ['-o', 'APT::Architecture='+architecture, '-o', 'APT::Architectures='+architecture,
+                       '-o', f'Dir::Etc::sourcelist={source}', '-o', 'Dir::Etc::sourceparts=-',
+                       '-o', f'Dir::State::lists={apt / "lists"}', '-o', 'APT::Sandbox::User=root']
+            subprocess.run(['apt-get', *options, 'update'], check=True)
+            subprocess.run(['apt-get', *options, 'download',
+                            *[name+':'+architecture for name in ('libc6', 'libgcc-s1', 'libstdc++6')]],
+                           cwd=packages, check=True)
+            marker.touch()
+        result.extend(sorted(packages.glob('*.deb')))
+    return result
+
 
 
 def materialize(platform, root):
@@ -214,9 +219,12 @@ def prepare(steam):
     # Never overwrite thunks in a provider used by another instance's process.
     identity = hashlib.sha256()
     identity.update((platform/'usr-mtree.txt.gz').read_bytes())
-    for thunk in ('libGL-guest.so', 'libvulkan-guest.so'):
-        identity.update((fex/'usr/share/fex-emu/GuestThunks'/thunk).read_bytes())
-    root = cache/(platform.name+'-v2-'+identity.hexdigest()[:24])
+    thunks = [('GuestThunks', 'libGL-guest.so', 'x86_64-linux-gnu', 'libGL.so.1'),
+              ('GuestThunks', 'libvulkan-guest.so', 'x86_64-linux-gnu', 'libvulkan.so.1'),
+              ('GuestThunks_32', 'libGL-guest.so', 'i386-linux-gnu', 'libGL.so.1')]
+    for directory, thunk, _, _ in thunks:
+        identity.update((fex/'usr/share/fex-emu'/directory/thunk).read_bytes())
+    root = cache/(platform.name+'-v3-'+identity.hexdigest()[:24])
     with (cache/'prepare.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if not (root/'complete').exists():
@@ -232,10 +240,9 @@ def prepare(steam):
         # pressure-vessel rejects provider links outside the provider root.
         # Copy Valve's thunks into our cache, refreshing them after FEX updates.
         # Neither the FEX depot nor the Steam runtime depot is modified.
-        for name, thunk in [('libGL.so.1', 'libGL-guest.so'),
-                            ('libvulkan.so.1', 'libvulkan-guest.so')]:
-            source = fex/'usr/share/fex-emu/GuestThunks'/thunk
-            target = root/'usr/lib/x86_64-linux-gnu'/name
+        for directory, thunk, architecture, name in thunks:
+            source = fex/'usr/share/fex-emu'/directory/thunk
+            target = root/'usr/lib'/architecture/name
             if target.is_symlink() or not target.is_file() or not filecmp.cmp(source, target, shallow=False):
                 temporary = target.with_suffix(target.suffix + '.tmp')
                 shutil.copy2(source, temporary)
@@ -244,7 +251,10 @@ def prepare(steam):
             'root': './', 'locales': False, 'va_api': False, 'vdpau': False,
             'architectures': {'x86_64-linux-gnu': {
                 'fallback_library_paths': ['/usr/lib/x86_64-linux-gnu'],
-                'gconv': '/usr/lib/x86_64-linux-gnu/gconv'}}}}
+                'gconv': '/usr/lib/x86_64-linux-gnu/gconv'},
+                'i386-linux-gnu': {
+                'fallback_library_paths': ['/usr/lib/i386-linux-gnu'],
+                'gconv': '/usr/lib/i386-linux-gnu/gconv'}}}}
         descriptor = root/'graphics_provider.json'
         content = json.dumps(provider)+'\n'
         if not descriptor.exists() or descriptor.read_text() != content:

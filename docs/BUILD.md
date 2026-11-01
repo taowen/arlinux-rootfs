@@ -29,7 +29,7 @@ which prevents games from receiving physical movement keys. The upstream adapter
 also implements forwarding synthesized key events through input-method-v2.
 Do not bypass this by disabling input methods for individual applications.
 
-## Steam native Linux graphics
+## GPU driver selection
 
 Android probes the installed Linux Vulkan ICD before selecting a GPU overlay.
 Devices with kgsl try Turnip first; initialization failure selects the generic
@@ -42,6 +42,11 @@ an APK update alone does not replace their graphics payloads.
 All Linux clients, including Zink/OpenGL applications such as Blender, inherit
 the selected ICD. Bionic Wine separately probes its own binaries in the Wine
 installer; Linux driver success does not establish Bionic driver support.
+The probe establishes hardware Vulkan initialization, not application compatibility.
+Zink/OpenGL and individual applications can require additional vendor features;
+fallback cannot supply an unimplemented feature such as timeline semaphores.
+
+## Steam native Linux graphics
 
 `runtime/tools/steam_fex.py` prepares the graphics provider consumed by Valve's
 FEX compatibility tool; Steam owns game selection and its Soldier/Sniper launch

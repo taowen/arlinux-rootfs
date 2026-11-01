@@ -74,6 +74,6 @@ def stop(task_id: str) -> None:
 
     This can discard unsaved work. Use only for an application the user asked
     to end, or a task you started for the current request. Do not stop shared
-    desktop services or OpenCode itself while carrying out another task.
+    desktop services or the requesting assistant while carrying out another task.
     """
     _shell().task_request('stop', id=task_id)

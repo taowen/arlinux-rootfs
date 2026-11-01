@@ -29,6 +29,22 @@ which prevents games from receiving physical movement keys. The upstream adapter
 also implements forwarding synthesized key events through input-method-v2.
 Do not bypass this by disabling input methods for individual applications.
 
+## Steam native Linux graphics
+
+`runtime/tools/steam_fex.py` prepares the graphics provider consumed by Valve's
+FEX compatibility tool; Steam owns game selection and its Soldier/Sniper launch
+chain. Windows games use the independent Bionic Wine adapter. Do not replace
+Valve runtime files or bypass pressure-vessel to repair the native Linux path.
+
+Before Steam starts, managed graphics environment paths resolve the Android
+host's `files/rootfs` alias to the active image. `STEAM_COMPAT_MOUNTS` exports that
+same complete image plus the Android driver directories, so ICD/layer manifests,
+Mesa, libhybris and their auxiliary resources retain consistent absolute paths
+inside nested runtime views. Exporting only the Mesa and hybris library folders
+loses manifests and layers. User-supplied paths outside the managed image and
+explicit provider choices remain unchanged. This does not provide sandbox
+isolation; Android and the existing tawcroot path view retain their roles.
+
 ## ARLinux Guest Tools
 
 First-party application integration is a separate `guest-tools` product, not part

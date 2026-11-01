@@ -8,6 +8,12 @@ shell does not preserve `PYTHONPATH`, use
 Read `/usr/lib/arlinux/guest/agent-AGENTS.md` to revisit these instructions and
 `/usr/lib/arlinux/python/arlinux/` for the Python API source and docstrings.
 
+These APIs are shared by OpenCode, Grok Bot and other local assistants. They do
+not select a model provider or require an OpenCode process. After leaving the
+desktop, return to the requesting assistant's saved window, not the assistant
+currently selected in Settings. Read the installed API source again if a saved
+private skill disagrees with it; do not keep an outdated API inventory.
+
 You run inside an Arlinux Linux desktop on Android; `/etc/os-release` names the
 distribution. For Linux GUI accessibility, use the preinstalled upstream
 `dogtail` and `pyatspi` APIs for actions. Do not guess screen coordinates. When

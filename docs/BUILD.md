@@ -54,8 +54,8 @@ supported conversation/skill UI: ask it to read the local instructions and save
 the ARLinux workflow as a private skill. Do not patch its client, edit its private
 databases, bypass local command approval or expose the host socket over TCP.
 `phone.open_desktop(serial)` returns to ARLinux after verified ADB setup; restore
-the requesting assistant with its saved Tasks window ID. OpenCode retains its
-prompt-specific `phone.open_opencode(serial)` adapter.
+the requesting assistant with its saved Tasks window ID. OpenCode and Grok Bot
+use this same flow, independent of the assistant currently selected in Settings.
 First-use OpenCode installation also installs native ADB from the distribution
 repository (`adb` on Debian, `android-tools` on Arch). Later launches reuse the
 installed tools without refreshing package databases. Device debugging,
@@ -63,11 +63,12 @@ authorization and wireless pairing remain explicit user operations.
 The `arlinux.phone` API provides separate, user-authorized main-screen capture
 through the Android host's MediaProjection foreground service. The user must
 accept screen sharing while ARLinux is visible, then can open system Settings
-while OpenCode observes screenshots in the background. Sharing ends from the
+while the requesting assistant observes screenshots in the background. Sharing ends from the
 notification, system controls or `phone.stop_capture()`; consent is never cached.
-After verifying wireless ADB and ending capture, `phone.open_opencode(serial)`
-uses that authorized connection's standard `am start` to return to the host and
-focus OpenCode. It does not introduce a notification service or grant ADB access.
+After verifying wireless ADB and ending capture, `phone.open_desktop(serial)`
+uses that authorized connection's standard `am start` to return to the host;
+`tasks.focus(saved_window_id)` restores the requesting assistant. This introduces
+no assistant-specific Intent, notification service or ADB authorization mechanism.
 The shared right-edge OpenCode voice helper lives in `runtime/tools/guest` and
 ships with Guest Tools for every distribution, including Yibu and Classic. It
 waits for the actual AT-SPI composer within one bounded startup deadline, not
@@ -78,11 +79,14 @@ Android application is in front. Do not replace this with X11 title matching.
 
 Protocol 4 distribution manifests declare `guestToolsApi: 1`. Android installs a
 matching independently verified Guest Tools package before first boot, records
-its archive hash in the instance metadata, and never changes a running instance.
+its installed archive hash in the instance metadata, and never changes tools
+while the desktop is running. Before desktop startup, Android adopts the current
+embedded tools (or verified Debug selection); a matching receipt skips copying.
 The Debug device deployment downloads both products separately and reuses an
 unchanged verified base capsule. Release APKs embed both exact products as
 separate assets. Instance snapshots include the pinned Guest Tools archive.
-Pre-split distributions without this API declaration remain self-contained.
+Pre-split distributions also receive these managed integration updates; their OS,
+applications, home and Wine prefix remain in place.
 Guest Tools also supplies the Debian-only Software Store entry. Its standard
 desktop `TryExec` hides it on guests without APT. First use installs Synaptic
 from the configured distribution repositories, then launches it using guest

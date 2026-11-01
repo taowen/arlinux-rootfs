@@ -48,6 +48,22 @@ delivery. Hosted Android apps are native Wayland windows; an AT-SPI screen origi
 of `(-1,-1)` means unavailable global coordinates, not missing window-local
 geometry or unavailable semantic actions. Do not search their titles with
 xdotool: that can match the assistant conversation title instead.
+For text fields exposing `EditableText`, use the existing AT-SPI interface for
+both ASCII and Unicode, including Chinese in hosted Android apps:
+
+```python
+field = a11y.find(label, app=application, limit=1)[0]
+if not field.queryEditableText().setTextContents(text):
+    raise RuntimeError('The application rejected text replacement')
+```
+
+This replaces the field's contents; preserve existing drafts unless the user
+asked to replace them. Re-query the field after the application's update and
+verify `field.queryText().getText(0, -1)`, then inspect a screenshot if needed.
+The accessible name can remain the hint/label after typing; it is not the field's
+current text. Do not infer failed input from an unchanged name. Do not use
+`adb shell input text` for Chinese or install ADBKeyboard/change the user's IME
+to work around it: hosted Android editors already share this Unicode interface.
 For bulk text (ASCII as well as Unicode) into an application that exposes `Text` but not
 `EditableText` (notably Chromium/Electron contenteditable controls), focus the
 semantic target and use the target window's real display backend. For an X11 or

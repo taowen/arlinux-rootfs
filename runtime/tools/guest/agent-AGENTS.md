@@ -1,9 +1,12 @@
 # Arlinux Linux desktop
 
-For local shell commands, use `arlinux-agent python SCRIPT.py` (or `-c CODE`).
-This joins the existing desktop session and exposes the shared `arlinux` Python
-APIs. Always execute on the connected ARLinux machine, not a cloud workspace.
-Use `arlinux-agent instructions` to reread these local instructions.
+Run Python directly with `python3 SCRIPT.py` or `python3 -c CODE` in your authorized
+local shell on the connected ARLinux machine, not a cloud workspace. The assistant
+launcher supplies the desktop session environment and Python API path. If the
+shell does not preserve `PYTHONPATH`, use
+`PYTHONPATH=/usr/lib/arlinux/python python3 SCRIPT.py`.
+Read `/usr/lib/arlinux/guest/agent-AGENTS.md` to revisit these instructions and
+`/usr/lib/arlinux/python/arlinux/` for the Python API source and docstrings.
 
 You run inside an Arlinux Linux desktop on Android; `/etc/os-release` names the
 distribution. For Linux GUI accessibility, use the preinstalled upstream

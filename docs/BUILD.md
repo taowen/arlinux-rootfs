@@ -45,9 +45,10 @@ The OpenCode launcher rewrites its managed `AGENTS.md` section on every start an
 appends `/etc/arlinux/opencode-AGENTS.md` when a distribution provides one.
 Shared agent guidance lives in `runtime/tools/guest/agent-AGENTS.md`; OpenCode's
 own adapter only describes its integration-specific behavior. Other assistants
-can read `arlinux-agent instructions` from their authorized local shell and use
-`arlinux-agent python SCRIPT.py` or `arlinux-agent python -c CODE` to join the
-existing desktop environment. Grok Bot inherits that same environment and
+can read `/usr/lib/arlinux/guest/agent-AGENTS.md` and the Python API source under
+`/usr/lib/arlinux/python/arlinux/` from their authorized local shell, then run
+`python3` directly. Assistant launchers supply the desktop session environment
+and `PYTHONPATH`. Grok Bot inherits that same environment and
 installs native ADB on first use. Its private skills are managed through its
 supported conversation/skill UI: ask it to read the local instructions and save
 the ARLinux workflow as a private skill. Do not patch its client, edit its private

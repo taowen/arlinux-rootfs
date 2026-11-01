@@ -19,6 +19,7 @@ import hashlib
 
 def configure(steam):
     os.environ.setdefault('PRESSURE_VESSEL_BWRAP', '/usr/local/bin/bwrap')
+    configure_graphics()
     fex, root = prepare(steam)
     # We launch Valve's ARM64 client directly. Its normal shell launcher adds
     # these native runtime helpers to PATH; the client starts the launcher
@@ -34,19 +35,36 @@ def configure(steam):
     os.environ.setdefault('FEX_ENV', 'LD_LIBRARY_PATH='
                           + os.environ.get('LD_LIBRARY_PATH', '') + ':'
                           + str(libs) + ':' + str(libs/'pulseaudio'))
-    # Export auxiliary dlopen resources as well as the ELF dependencies.
-    # Resolve the app-owned root alias once, before entering Valve's path view.
+
+
+def configure_graphics():
+    """Keep the native graphics runtime addressable in pressure-vessel's view.
+
+    The host's rootfs alias is outside the container's root. Resolve managed
+    graphics paths before pressure-vessel inspects them, and export that same
+    image as a single mount: ICD/layer manifests have dependencies beyond Mesa.
+    Explicit graphics paths outside the managed image remain unchanged.
+    """
     files = os.environ.get('BIONICX_FILES')
-    if files:
-        native = (Path(files)/'rootfs').resolve(strict=True)
-        hybris = native/'usr/lib/hybris'
-        directories = [native/'usr/lib/mesa', hybris,
-                       *map(Path, ('/arlinux-shared', '/system', '/system_ext', '/product', '/vendor', '/odm', '/apex'))]
-        mounts = os.environ.get('STEAM_COMPAT_MOUNTS', '').split(':')
-        mounts += [str(p) for p in directories if p.is_dir()]
-        os.environ['STEAM_COMPAT_MOUNTS'] = ':'.join(dict.fromkeys(p for p in mounts if p))
-        if hybris.is_dir():
-            os.environ.setdefault('HYBRIS_LINKER_DIR', str(hybris/'libhybris/linker'))
+    if not files:
+        return
+    alias = Path(files)/'rootfs'
+    native = alias.resolve(strict=True)
+    prefix = str(alias) + '/'
+    for key in ('VK_DRIVER_FILES', 'VK_ICD_FILENAMES', 'VK_LAYER_PATH',
+                'LIBGL_DRIVERS_PATH', 'LD_LIBRARY_PATH'):
+        if key in os.environ:
+            os.environ[key] = ':'.join(str(native/path[len(prefix):])
+                                      if path.startswith(prefix) else path
+                                      for path in os.environ[key].split(':'))
+    directories = [native, *map(Path, ('/arlinux-shared', '/system', '/system_ext',
+                                     '/product', '/vendor', '/odm', '/apex'))]
+    mounts = os.environ.get('STEAM_COMPAT_MOUNTS', '').split(':')
+    mounts += [str(p) for p in directories if p.is_dir()]
+    os.environ['STEAM_COMPAT_MOUNTS'] = ':'.join(dict.fromkeys(p for p in mounts if p))
+    hybris = native/'usr/lib/hybris'
+    if hybris.is_dir():
+        os.environ.setdefault('HYBRIS_LINKER_DIR', str(hybris/'libhybris/linker'))
 
 
 class IncompleteRuntime(RuntimeError):

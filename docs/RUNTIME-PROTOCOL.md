@@ -167,8 +167,9 @@ discovery follows the approach demonstrated by
 
 On Debian-based desktops, Steam retains ownership of compatibility selection.
 The launcher does not overwrite Valve's depot executables or rewrite
-explicit per-game third-party or native Linux choices. Bionic Wine is the
-Windows default; former ARLinux Proton selections migrate to Bionic.
+explicit per-game third-party or native Linux choices. The
+[Bionic adapter](STEAM_BIONIC.md) selects Windows builds by default; former
+ARLinux Proton selections migrate to Bionic.
 
 Install **FEX-Emu** (3127680) and **Steam Linux Runtime 3.0 (sniper)** (1628350)
 through Steam. Restart the client after installing these prerequisites.

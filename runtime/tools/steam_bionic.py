@@ -107,15 +107,20 @@ def default_config(text):
     changed = False
     for app, entry in list(mapping.items()) + ([] if '0' in mapping else [('0', {})]):
         name = entry.get('name', '')
-        # Migrate our removed adapter and the Windows default. Keep explicit
-        # per-game Valve/third-party choices and native Linux FEX selections.
+        # Prefer Windows depots even when Steam offers a native Linux build.
+        # Priority 75 is only a fallback and loses to native compatibility rules.
+        # Keep explicit per-game choices, including native Linux selections.
         if name == 'arlinux-proton-arm64' or (app == '0' and
-                (not name or name.lower() == 'native' or name.lower().startswith('proton_'))):
-            entry = dict(entry, name=TOOL)
-            entry.setdefault('config', '')
-            entry.setdefault('priority', '75' if app == '0' else '250')
-            mapping[app] = entry
-            changed = True
+                (not name or name == TOOL or name.lower() == 'native' or name.lower().startswith('proton_'))):
+            selected = dict(entry, name=TOOL)
+            selected.setdefault('config', '')
+            if app == '0':
+                selected['priority'] = '250'
+            else:
+                selected.setdefault('priority', '250')
+            if selected != entry:
+                mapping[app] = selected
+                changed = True
     if not changed:
         return text
     def encode(data, indent):

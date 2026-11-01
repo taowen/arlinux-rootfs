@@ -3,7 +3,10 @@
 `python3 /usr/lib/arlinux/steam_bionic.py register STEAM_DIRECTORY` registers
 `arlinux-wine-bionic` under `compatibilitytools.d`. Steam startup also registers
 it directly, without a Proton depot or patch pack. Bionic Wine is the ARLinux
-Windows default; explicit third-party and native Linux choices are preserved.
+default for games with Windows builds, including games that also offer native
+Linux builds. The global `CompatToolMapping/0` entry uses priority `250`;
+priority `75` is only a fallback and allows native compatibility rules to win.
+Explicit per-game third-party and native Linux choices are preserved.
 Previous ARLinux Proton selections migrate to Bionic. Restart Steam to rescan tools.
 
 Steam invokes `/run %verb%`; the guest adapter accepts `run` and
@@ -18,9 +21,10 @@ Only the explicitly listed game identities and WebView environment variables
 cross the host boundary; guest glibc loader and graphics paths do not.
 
 `STEAM_COMPAT_DATA_PATH` remains Steam's per-game metadata directory, not the
-Wine prefix. Steam prepares the pinned Bionic runtime before handing control to
-Valve. On Play, `windows_webview.prepare()` prepares the instance-wide browser
-dependencies and `steamworks.session()` supplies the Steamworks bridge. Discovery
+Wine prefix. Before handing control to Valve, Steam startup prepares the Bionic
+runtime, initializes this prefix and prepares the instance-wide WebView2 runtime.
+On Play, `windows_webview.prepare()` reuses that runtime and
+`steamworks.session()` supplies the Steamworks bridge. Discovery
 helpers without a game identity run without a Steamworks session. These paths
 share the Windows launcher's Wine prefix. The adapter does not inject engine
 arguments or create title-specific compatibility selections. User selections
@@ -39,31 +43,8 @@ The patched Steam Proton adapter and its core build/install chain were removed.
 Implementation does not establish compatibility for every game: acceptance
 requires a fresh instance, hardware acceleration and actual Play/gameplay.
 
-Run `python3 tests/test-steam-bionic.py` to verify registration, preservation of
-unrecognized tools, argument boundaries, exit propagation and identity checks.
 For device validation, delete and reinstall the selected test Linux instance,
 use a fresh prefix, and record exact APK, bundle and runtime hashes. Reusing a
 verified immutable runtime outside the instance is permitted; prefix or home
 restoration is not. Authentication-only test preparation remains explicit and
 private, outside application startup.
-
-## Historical investigation (2026-10-14)
-
-The following observations apply only to that runtime, not the current build's
-acceptance status or deployment procedure.
-
-Runtime `cd7be9eddc996bb4353c7b6cd3642dae3aab86ff300e56d51bf4c7c517cc390f`
-(Wine 11.19 Bionic r3) started My Little Shark and WebView2 on a fresh instance.
-DXVK identified the phone's Adreno 830 Qualcomm Vulkan driver. The game then
-hit an access violation in ole32 `RevokeDragDrop` at RVA 0x84258, dereferencing
-the registered drop target during cleanup; target exit was 0xc0000005.
-An independent minimal controller probe returned successful MoveFocus and
-navigation. Under ANGLE Vulkan its GPU child repeatedly exited, with only six
-animation frames by tick 13. These results do not demonstrate rendered gameplay
-or establish whether cleanup masked an earlier initialization error.
-
-A further fresh-instance D3D11 probe also reproduced GPU child exits
-(0x80000003), logged DCompositionCreateDevice E_NOTIMPL and a fatal shared
-context creation failure. In that run MoveFocus returned E_ACCESSDENIED;
-earlier successful focus probes do not establish that focus is fixed.
-The first GPU exception and real Steam Play still require validation.

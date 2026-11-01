@@ -31,6 +31,18 @@ Do not bypass this by disabling input methods for individual applications.
 
 ## Steam native Linux graphics
 
+Android probes the installed Linux Vulkan ICD before selecting a GPU overlay.
+Devices with kgsl try Turnip first; initialization failure selects the generic
+libhybris/vendor-driver overlay instead. Each candidate must create a hardware
+graphics device. Selection is reused only for the same overlay hashes and Android
+build fingerprint, so updated Mesa or vendor drivers trigger another probe.
+New bundles declare `gpuCapabilityProbe=1` in `guest.properties`. Older imported
+bundles retain their original GPU selection until the distribution is replaced;
+an APK update alone does not replace their graphics payloads.
+All Linux clients, including Zink/OpenGL applications such as Blender, inherit
+the selected ICD. Bionic Wine separately probes its own binaries in the Wine
+installer; Linux driver success does not establish Bionic driver support.
+
 `runtime/tools/steam_fex.py` prepares the graphics provider consumed by Valve's
 FEX compatibility tool; Steam owns game selection and its Soldier/Sniper launch
 chain. Windows games use the independent Bionic Wine adapter. Do not replace

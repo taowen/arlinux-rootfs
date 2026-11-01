@@ -121,6 +121,8 @@ for product in "${pending[@]}"; do
     aarch64-linux-gnu-gcc -O2 -Wall -Wextra -Werror runtime/tools/bwrap-compat.c -o "$output/bwrap"
 done
 teapot=build/linux/teapot; mkdir -p "$teapot"
+aarch64-linux-gnu-gcc -O2 -Wall -Wextra -Werror -idirafter /usr/include \
+  tools/build/vulkan-probe.c -lvulkan -o "$teapot/vulkan-probe"
 xml=/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml
 wayland-scanner client-header "$xml" "$teapot/xdg-shell-client-protocol.h"
 wayland-scanner private-code "$xml" "$teapot/xdg-shell-protocol.c"
@@ -231,7 +233,7 @@ config = json.loads((product/'product.json').read_text())
 profile_file = product/'profile.json'
 profile = json.loads(profile_file.read_text()); profile['launch']['environment'].update(config.get('environment',{}))
 (assets/'profile.json').write_text(json.dumps(profile,indent=2)+'\n')
-(assets/'guest.properties').write_text('distributionId='+product.name+'\nrequiredFiles='+','.join(config['requiredFiles'])+'\nlibraryDirectories='+','.join(config['libraryDirectories'])+'\n')
+(assets/'guest.properties').write_text('distributionId='+product.name+'\nrequiredFiles='+','.join(config['requiredFiles'])+'\nlibraryDirectories='+','.join(config['libraryDirectories'])+'\ngpuCapabilityProbe=1\n')
 PY
     tar -C "$rootfs" --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
       --exclude=./proc --exclude=./sys --exclude=./dev --exclude=./run --exclude=./tmp \
@@ -252,6 +254,7 @@ PY
     ln -sfn libdril_dri.so "$overlay/usr/lib/mesa/dri/zink_dri.so"
     ln -sfn libdril_dri.so "$overlay/usr/lib/mesa/dri/swrast_dri.so"
     cp "$hybris/libVkLayer_hybris_compat.so" "$hybris/VkLayer_hybris_compat.json" "$overlay/usr/lib/arlinux/vulkan/"
+    cp "$teapot/vulkan-probe" "$overlay/usr/lib/arlinux/vulkan-probe"
     api="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["ICD"]["api_version"])' "$mesa/../share/vulkan/icd.d/freedreno_icd.aarch64.json")"
     python3 - "$overlay/usr/share/vulkan/icd.d/freedreno_icd.json" "$api" <<'PY'
 import json,pathlib,sys

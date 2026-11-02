@@ -1,4 +1,4 @@
-"""Consume the declared, checksum-verified capture product into a runtime seed."""
+"""Stage the checksum-verified optional capture product for developer deployment."""
 import hashlib
 import json
 from pathlib import Path, PurePosixPath

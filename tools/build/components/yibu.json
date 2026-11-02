@@ -4,7 +4,6 @@
   "dependencies": [
     "linux-mesa",
     "linux-hybris",
-    "vulkan-capture",
     "linux-ibus",
     "linux-waybar"
   ],

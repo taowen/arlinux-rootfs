@@ -26,7 +26,7 @@ def rootfs_sources(framework, product):
         inputs[name] = source_state(framework / name)
     for name in ('linux-assets.sh', 'linux-gpu.sh', 'linux-aarch64.ini',
                  'mesa-debs.py', 'mesa-arch.py', 'doctor.sh',
-                 'package-rootfs.py', 'package-rootfs.sh', 'pipeline_cache.py', 'component_inputs.py', 'install-capture.py'):
+                 'package-rootfs.py', 'package-rootfs.sh', 'pipeline_cache.py', 'component_inputs.py'):
         inputs['tools/build/' + name] = inventory(framework / 'tools/build' / name)
     return inputs
 
@@ -60,7 +60,6 @@ def main():
                for name in ('gpu.mesa.outputs.json', 'gpu.hybris.outputs.json')}
         common = dict(engine=digest(__file__), sources=rootfs_sources(framework, product),
                       gpu=gpu, distribution=product,
-                      capture=digest(framework/'build/artifacts/capture/capture.zip'),
                       input=digest(framework/'build/linux/ibus.outputs.json'))
         if product == 'yibu':
             common['shell'] = digest(framework/'build/artifacts/components/linux-waybar.json')

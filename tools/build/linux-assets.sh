@@ -93,7 +93,7 @@ input_id() {
                 | sort -z | xargs -0 -r sha256sum)
         git -C "distributions/$product" submodule status --recursive || true
         printf '%s\n' "$gpu_inputs"
-        sha256sum build/artifacts/capture/capture.zip build/linux/ibus.outputs.json
+        sha256sum build/linux/ibus.outputs.json
         if [[ "$product" == yibu ]]; then sha256sum build/artifacts/components/linux-waybar.json; fi
         true
     } | sha256sum | cut -d' ' -f1
@@ -178,7 +178,6 @@ PY
         cp -a "$waybar_tree/." "$rootfs/"
     fi
     mkdir -p "$rootfs/usr/lib/arlinux/guest"
-    python3 tools/build/install-capture.py build/artifacts/capture "$rootfs/usr/lib/arlinux/gfxreconstruct"
     install -Dm755 "build/linux/runtime/$product/bwrap" "$rootfs/usr/local/bin/bwrap"
     cp tools/arlinux-app-data/org.arlinux.HostedInput.service \
       "$rootfs/usr/lib/arlinux/"

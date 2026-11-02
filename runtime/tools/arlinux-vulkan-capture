@@ -141,6 +141,9 @@ def main():
             parser.error('tool and output paths must be absolute guest paths without ..')
         return path if path.is_relative_to(files) else root / str(path).lstrip('/')
     tools, out = native(args.tools), native(args.output)
+    if not (tools / 'provenance.json').is_file():
+        parser.error('Capture tools are not installed by default. Stage the optional capture product '
+                     'and select its directory with --tools.')
     provenance = json.loads((tools / 'provenance.json').read_text())
     for name, expected in provenance['capture_tools'].items():
         path = tools / name

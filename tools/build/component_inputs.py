@@ -66,8 +66,4 @@ def package_inputs(common):
     package_runtime = {'guest-sudo.c', 'bwrap-compat.c', 'bwrap-view.h', 'install-mesa-arch.sh'}
     sources['runtime/tools'] = {name: value for name, value in sources['runtime/tools'].items()
                                if name in package_runtime}
-    sources.pop('tools/build/install-capture.py', None)
-    # Capture tools are refreshed from the verified current seed by seal-rootfs;
-    # package preparation neither executes them nor installs their dependencies.
-    return {name: value for name, value in dict(common, sources=sources).items()
-            if name != 'capture'}
+    return dict(common, sources=sources)

@@ -23,6 +23,11 @@ matching client library live under `/usr/lib/arlinux/ibus`; distribution-owned
 IBus daemons, toolkit modules and Python GI bindings remain in place. Source and
 output hashes govern its independent cache and component capsule.
 
+The shared Yibu/Classic/Sequoia image excludes `/usr/share/ibus/dicts/*` through
+dpkg's path-exclude policy, including subsequent package upgrades. These are
+IBus emoji-search dictionaries; candidates and emoji input come from the hosted
+Android input method. IBus engines, transport and accessibility integration remain installed.
+
 The session uses this adapter with the hosted engine and the system keyboard
 layout. Older IBus Wayland adapters commit unhandled printable keys as text,
 which prevents games from receiving physical movement keys. The upstream adapter
@@ -244,13 +249,13 @@ The Android entry's `capture` command selects the independent `vulkan-capture`
 stage in `taowen/gfxreconstruct` on the ARM64 standard runner. Its pinned source
 is `third_party/gfxreconstruct`; native compilation, verified staging and
 `capture.zip` assembly are owned by `tools/build/vulkan-capture-component.py`.
-Distributions consume the exact verified capture product as a declared
-dependency. The layer, conversion/replay tools and license notices are installed
-in `/usr/lib/arlinux/gfxreconstruct`; no capture layer is enabled by default.
-The single runtime command `/usr/bin/arlinux-vulkan-capture` selects it only for
-its child process. Its archive receipt and per-tool provenance accompany the product.
+Distributions do not depend on or embed this developer product. For a diagnostic
+session, stage the verified `capture-tools` directory and preserve executable
+permissions. `/usr/bin/arlinux-vulkan-capture --tools DIRECTORY` selects those
+tools only for its child process. The archive receipt, licenses and per-tool
+provenance accompany the separate product; no layer is installed globally.
 
-In the desktop terminal, run `arlinux-vulkan-capture --seconds 30 -- APPLICATION ARGUMENTS`.
+After staging, run `arlinux-vulkan-capture --tools DIRECTORY --seconds 30 -- APPLICATION ARGUMENTS`.
 It records only that child invocation, defaults to a 512 MiB approximate capture
 limit and writes `~/Documents/ARLinux-Captures/TIMESTAMP`. The child is stopped
 at the time/size limit; save work first. Captures can contain private data and

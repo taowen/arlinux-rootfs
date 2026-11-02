@@ -97,7 +97,11 @@ def app_directory(steam, appid):
             contents = manifest.read_text()
             state = re.search(r'"StateFlags"\s+"(\d+)"', contents)
             name = re.search(r'"installdir"\s+"([^"]+)"', contents)
-            if name and state and int(state[1]) & 4:
+            size = re.search(r'"SizeOnDisk"\s+"(\d+)"', contents)
+            # Steam can mark an empty architecture-specific depot complete.
+            # Such metadata does not provide a runnable graphics runtime; keep
+            # the client available to download/repair it through Steam itself.
+            if name and state and int(state[1]) & 4 and size and int(size[1]) > 0:
                 directory = library/'steamapps/common'/name[1]
                 if directory.is_dir():
                     return directory

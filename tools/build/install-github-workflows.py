@@ -33,11 +33,17 @@ def render_workflow(plan,template):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check',action='store_true')
+    parser.add_argument('--repository', help='Install only this component repository wrapper')
     args=parser.parse_args()
     directory=Path(__file__).resolve().parent
     plan=load_plan()
     workflow=render_workflow(plan,(directory/'github-component.workflow.yml').read_text())
-    for repository in sorted({s['repository'] for s in plan['stages'].values()}):
+    repositories = {s['repository'] for s in plan['stages'].values()}
+    if args.repository:
+        if args.repository not in repositories:
+            raise ValueError('Repository does not own a declared component')
+        repositories = {args.repository}
+    for repository in sorted(repositories):
         metadata=api('repos/'+repository)
         if metadata['private']:
             raise ValueError('Free standard runner builds require a public component repository')

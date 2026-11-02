@@ -81,7 +81,11 @@ def prepare(data, framework):
         'libxcb-xfixes0-dev', 'libxcb-randr0-dev', 'libxdamage-dev', 'libxext-dev',
         'libelf-dev', 'libudev-dev', 'libgbm-dev', 'gperf', 'libglib2.0-dev', 'libglib2.0-dev-bin',
         'ccache', 'gettext', 'libgettextpo-dev', 'libssl-dev', 'unzip', 'autopoint', 'intltool', 'python-is-python3']
-    if data['stage'] == 'linux-ibus':
+    if data['stage'] == 'linux-waybar':
+        packages = ['build-essential', 'git', 'ninja-build', 'ccache', 'pkg-config', 'cmake',
+                    'python3', 'python3-venv', 'zstd', 'libgtkmm-3.0-dev',
+                    'libwayland-dev', 'wayland-protocols', 'libxkbregistry-dev']
+    elif data['stage'] == 'linux-ibus':
         packages = ['build-essential', 'git', 'python3', 'python3-venv', 'ccache', 'pkg-config',
                     'libglib2.0-dev', 'libgtk-3-dev', 'libdbus-1-dev', 'libdconf-dev',
                     'libwayland-dev', 'libxkbcommon-dev', 'wayland-protocols', 'valac',
@@ -112,6 +116,8 @@ def prepare(data, framework):
     cross.chmod(0o755)
     if data['stage'] in ('guest-tools', 'linux-ibus'):
         pass  # These recipes require no submodules.
+    elif data['stage'] == 'linux-waybar':
+        run('git', '-C', framework, 'submodule', 'update', '--init', '--depth', '1', 'third_party/waybar')
     elif data['stage'] == 'vulkan-capture':
         run('git', '-C', framework, 'submodule', 'update', '--init', '--depth', '1',
             'third_party/gfxreconstruct', 'third_party/libhybris')
@@ -220,7 +226,10 @@ def build(data, framework):
     for dependency in data['dependencies']:
         import_dependency(root, dependency, visited)
     config = root / 'product.json'
-    if stage == 'linux-ibus':
+    if stage == 'linux-waybar':
+        run('bash', framework/'build.sh', 'waybar',
+            env=dict(os.environ, CCACHE_DIR=str(root/'cache/ccache'), CCACHE_BASEDIR=str(framework)))
+    elif stage == 'linux-ibus':
         run('bash', framework/'build.sh', 'input',
             env=dict(os.environ, CCACHE_DIR=str(root/'cache/ccache'), CCACHE_BASEDIR=str(framework)))
     elif stage == 'guest-tools':

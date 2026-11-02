@@ -5,7 +5,8 @@
     "linux-mesa",
     "linux-hybris",
     "vulkan-capture",
-    "linux-ibus"
+    "linux-ibus",
+    "linux-waybar"
   ],
   "product": "rootfs",
   "compilerCacheMiB": 2048,

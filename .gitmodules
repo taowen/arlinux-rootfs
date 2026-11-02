@@ -30,3 +30,6 @@
 [submodule "third_party/gfxreconstruct"]
 	path = third_party/gfxreconstruct
 	url = https://github.com/taowen/gfxreconstruct.git
+[submodule "third_party/waybar"]
+	path = third_party/waybar
+	url = https://github.com/taowen/Waybar.git

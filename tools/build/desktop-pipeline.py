@@ -62,6 +62,8 @@ def main():
                       gpu=gpu, distribution=product,
                       capture=digest(framework/'build/artifacts/capture/capture.zip'),
                       input=digest(framework/'build/linux/ibus.outputs.json'))
+        if product == 'yibu':
+            common['shell'] = digest(framework/'build/artifacts/components/linux-waybar.json')
         def assets(out):
             invoke('bash', 'tools/build/linux-assets.sh', *(['--rebuild'] if args.rebuild else []), product)
             shutil.copytree(framework / 'distributions' / product / 'build/assets', out, symlinks=True)

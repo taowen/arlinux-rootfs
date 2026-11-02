@@ -9,6 +9,7 @@ case "$command" in
   guest-tools) exec python3 tools/build/guest-tools.py "$@" ;;
   capture) exec python3 tools/build/vulkan-capture-component.py "$@" ;;
   input) exec python3 tools/build/ibus-component.py "$@" ;;
+  waybar) exec python3 tools/build/waybar-component.py "$@" ;;
   gpu) exec python3 tools/build/linux-gpu-component.py "$@" ;;
   github) exec python3 tools/build/github-products.py "$@" ;;
   rootfs) exec python3 tools/build/desktop-pipeline.py "$@" ;;

@@ -29,6 +29,18 @@ which prevents games from receiving physical movement keys. The upstream adapter
 also implements forwarding synthesized key events through input-method-v2.
 Do not bypass this by disabling input methods for individual applications.
 
+## Shared desktop panel client
+
+The `linux-waybar` component builds the pinned `taowen/Waybar` fork on its own
+ARM64 runner. Yibu's shared base consumes its verified runtime tree; Classic
+and Sequoia still share the same Linux image. Sequoia supplies a standard GTK
+menu bar descriptor, so GTK owns anchoring, selection and keyboard navigation.
+The fork also accepts ordinary upstream context-menu descriptors.
+Small checksum-pinned dependency wraps are linked statically to avoid coupling
+Debian guests to Ubuntu-specific C++ library sonames. GTK and glibc remain the
+distribution's libraries. The custom binary replaces the distribution Waybar;
+there is no second panel executable or compositor.
+
 ## GPU driver selection
 
 Android probes the installed Linux Vulkan ICD before selecting a GPU overlay.

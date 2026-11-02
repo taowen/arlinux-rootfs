@@ -1,0 +1,9 @@
+{
+  "repository": "taowen/Waybar",
+  "runner": "ubuntu-24.04-arm",
+  "dependencies": [],
+  "product": "desktop",
+  "compilerCacheMiB": 512,
+  "release": "arlinux-linux-waybar-debug",
+  "products": []
+}

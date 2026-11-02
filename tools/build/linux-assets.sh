@@ -94,6 +94,7 @@ input_id() {
         git -C "distributions/$product" submodule status --recursive || true
         printf '%s\n' "$gpu_inputs"
         sha256sum build/artifacts/capture/capture.zip build/linux/ibus.outputs.json
+        if [[ "$product" == yibu ]]; then sha256sum build/artifacts/components/linux-waybar.json; fi
         true
     } | sha256sum | cut -d' ' -f1
 }
@@ -172,6 +173,10 @@ if missing:
     raise SystemExit('rootfs seed is missing required files: ' + ', '.join(missing))
 PY
     cp -a build/linux/ibus/. "$rootfs/"
+    if [[ "$product" == yibu ]]; then
+        waybar_tree="$(python3 -c 'import json; from pathlib import Path; print(Path(json.load(open("build/artifacts/components/linux-waybar.json"))["output"])/"rootfs")')"
+        cp -a "$waybar_tree/." "$rootfs/"
+    fi
     mkdir -p "$rootfs/usr/lib/arlinux/guest"
     python3 tools/build/install-capture.py build/artifacts/capture "$rootfs/usr/lib/arlinux/gfxreconstruct"
     install -Dm755 "build/linux/runtime/$product/bwrap" "$rootfs/usr/local/bin/bwrap"

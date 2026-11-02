@@ -10,7 +10,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: arlinux-${{ fromJSON(inputs.request).stage }}
+  group: arlinux-${{ fromJSON(inputs.request).stage }}-${{ fromJSON(inputs.request).identity }}
   cancel-in-progress: false
 jobs:
   component:

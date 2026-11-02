@@ -269,12 +269,13 @@ def publish(data, framework):
     else:
         sys.path.insert(0, str(framework/'tools/build'))
         from pipeline_cache import inventory, build_references
-        descriptor = json.loads((framework/'build/artifacts/components'/f'{stage}.json').read_text())
+        descriptor_path = framework/'build/artifacts/components'/f'{stage}.json'
+        descriptor = json.loads(descriptor_path.read_text())
         state = descriptor['records'][stage]
         path = Path(descriptor['output'])
         if inventory(path) != state['outputs'] or build_references(path) != state['references']:
             raise ValueError('Component output differs from its build-cache receipt')
-        paths = [path.parent, path.parent.parent/'receipt.json',
+        paths = [descriptor_path, path.parent, path.parent.parent/'receipt.json',
                  *(Path(name) for name in state['references'])]
     # A forced hosted rerun must verify the rebuilt/cached bytes, but need not
     # recompress or upload the same immutable capsule a second time.

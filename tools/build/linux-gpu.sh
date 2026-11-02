@@ -133,6 +133,10 @@ build_hybris() {
         make -C "$dir" install DESTDIR="$install"
     done
     popd >/dev/null
+    mkdir -p "$install/usr/lib/hybris/diagnostics"
+    aarch64-linux-gnu-gcc -O2 -Wall -Wextra -Werror -pthread \
+        "$source/arlinux/diagnostics/tls-probe.c" -ldl \
+        -o "$install/usr/lib/hybris/diagnostics/tls-probe"
 }
 
 write_gpu_receipt() {

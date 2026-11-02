@@ -91,7 +91,8 @@ class Coordinator:
         release = api(f'repos/{repository}/releases/tags/{tag}',optional=True)
         if not release:
             return None
-        asset = next((a for a in release['assets'] if a['name']=='component.json'),None)
+        asset = next((a for a in release['assets']
+                      if a['name']=='component-'+request['identity']+'.json'),None)
         if not asset:
             return None
         digest = asset.get('digest','')
@@ -151,6 +152,10 @@ class Coordinator:
                         if seed['stage']!=stage:
                             raise ValueError('Cache seed belongs to a different component')
                         request['cacheSeed']['identity']=seed['identity']
+                        fixed=next((a for a in candidate['assets']
+                                    if a['name']=='component-'+seed['identity']+'.json'),None)
+                        if fixed:
+                            request['cacheSeed']['manifestUrl']=fixed['browser_download_url']
             payload=json.dumps(request,sort_keys=True)
             gh('workflow','run',self.plan['workflow'],'--repo',repository,'-f','request='+payload)
             print('START '+repository+'/'+stage,flush=True)

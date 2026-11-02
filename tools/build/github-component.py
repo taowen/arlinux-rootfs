@@ -288,7 +288,8 @@ def publish(data, framework):
     previous = subprocess.run(['gh','api',f'repos/{repository}/releases/tags/{tag}'], capture_output=True, text=True)
     if not previous.returncode:
         assets = json.loads(previous.stdout)['assets']
-        completed = next((a for a in assets if a['name'] == 'component.json'), None)
+        completed = next((a for a in assets
+                          if a['name'] == 'component-'+data['identity']+'.json'), None)
         if completed:
             expected = completed['digest'].removeprefix('sha256:')
             saved = download(completed['browser_download_url'], output/'previous.json', expected)
@@ -349,8 +350,10 @@ def publish(data, framework):
                 url=f'https://github.com/{repository}/releases/download/{tag}/{name}'))
     manifest = output/'component.json'
     manifest.write_text(json.dumps(record,sort_keys=True,indent=2)+'\n')
-    # Each component owns one fixed release. Upload verified payloads first;
-    # component.json is the final completion marker for this generation.
+    fixed_manifest = output/('component-'+data['identity']+'.json')
+    shutil.copyfile(manifest, fixed_manifest)
+    # Dependency readers pin the immutable generation; component.json only
+    # advertises the most recent cache seed. Publish both after the payloads.
     existing = subprocess.run(['gh','api',f'repos/{repository}/releases/tags/{tag}'],
                               capture_output=True,text=True)
     if existing.returncode:
@@ -361,9 +364,11 @@ def publish(data, framework):
         assets = {asset['name']:asset for asset in json.loads(existing.stdout)['assets']}
     # Payload names contain their archive digest so an in-flight reader cannot
     # mix generations. Replace the completion marker only after all uploads.
-    for file in [*(output/part['name'] for part in record['parts']), manifest]:
+    for file in [*(output/part['name'] for part in record['parts']), fixed_manifest, manifest]:
         if file.name in assets:
             if assets[file.name].get('digest') != 'sha256:'+sha(file):
+                if file == fixed_manifest:
+                    raise ValueError('Published component identity has different metadata')
                 run('gh','release','upload',tag,'--repo',repository,file,'--clobber')
         else:
             run('gh','release','upload',tag,'--repo',repository,file)

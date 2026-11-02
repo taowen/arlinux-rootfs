@@ -6,16 +6,8 @@ from pathlib import Path
 import platform
 import shutil
 import subprocess
-import tarfile
-
-from artifact_download import download
 
 from pipeline_cache import Cache, digest
-
-
-TRAY_REVISION = '00f37a04a66e2134a95e19cc0ecec21459fd4e76'
-TRAY_SHA256 = '793548d092b27b92cd44b666baa8f6cddebe7bf4ba353dd23958a8fd258da5c8'
-RUST_VERSION = '1.90.0'
 
 
 def run(*args, **kwargs):
@@ -27,8 +19,7 @@ def main():
     if os.environ.get('GITHUB_ACTIONS') != 'true' or platform.machine() not in ('aarch64', 'arm64'):
         raise RuntimeError('Waybar compilation requires the ARM64 GitHub runner')
     source = framework/'third_party/waybar'
-    run('rustup', 'toolchain', 'install', RUST_VERSION, '--profile', 'minimal', '--no-self-update')
-    inputs = dict(recipe=digest(__file__), tray=TRAY_SHA256, rust=RUST_VERSION,
+    inputs = dict(recipe=digest(__file__),
                   source=subprocess.check_output(['git', '-C', str(source), 'rev-parse', 'HEAD'], text=True).strip(),
                   compiler=subprocess.check_output(['c++', '--version'], text=True),
                   meson=subprocess.check_output(['meson', '--version'], text=True),
@@ -51,39 +42,6 @@ def main():
         binary.parent.mkdir(parents=True)
         shutil.copy2(work/'waybar', binary)
         run('strip', '--strip-unneeded', binary)
-        # Standard XEmbed -> SNI bridge; no Qt runtime, Wine patch or window rule.
-        tray_work = work/'xembsni'
-        tray_work.mkdir()
-        archive = download(f'https://codeload.github.com/jmylchreest/xembsni/tar.gz/{TRAY_REVISION}',
-                           tray_work/'source.tar.gz', TRAY_SHA256)
-        with tarfile.open(archive) as stream:
-            stream.extractall(tray_work, filter='data')
-        tray_source = tray_work/f'xembsni-{TRAY_REVISION}'
-        run('cargo', '+'+RUST_VERSION, 'build', '--locked', '--release', '--bin', 'xembsni',
-            '-j4', '--manifest-path', tray_source/'Cargo.toml',
-            env=dict(os.environ, CARGO_PROFILE_RELEASE_LTO='thin', CARGO_PROFILE_RELEASE_CODEGEN_UNITS='1'))
-        tray_binary = binary.with_name('xembsni')
-        shutil.copy2(tray_source/'target/release/xembsni', tray_binary)
-        run('strip', '--strip-unneeded', tray_binary)
-        tray_license = output/'rootfs/usr/share/doc/xembsni'
-        tray_license.mkdir(parents=True)
-        for name in ('Cargo.toml', 'README.md'):
-            shutil.copy2(tray_source/name, tray_license/name)
-        metadata = json.loads(subprocess.check_output(
-            ['cargo', '+'+RUST_VERSION, 'metadata', '--locked', '--format-version=1',
-             '--filter-platform=aarch64-unknown-linux-gnu', '--manifest-path', str(tray_source/'Cargo.toml')], text=True))
-        notices = []
-        for package in metadata['packages']:
-            directory = Path(package['manifest_path']).parent
-            destination = tray_license/(package['name']+'-'+package['version'])
-            destination.mkdir(exist_ok=True)
-            for path in directory.iterdir():
-                if path.is_file() and path.name.upper().startswith(('LICENSE', 'COPYING', 'NOTICE', 'AUTHORS')):
-                    shutil.copy2(path, destination/path.name)
-            notices.append({key: package.get(key) for key in ('name', 'version', 'license', 'authors', 'repository')})
-        (tray_license/'licenses.json').write_text(json.dumps(notices, indent=2)+'\n')
-        (tray_license/'SOURCE').write_text(
-            f'https://github.com/jmylchreest/xembsni/tree/{TRAY_REVISION}\n')
         licenses = output/'rootfs/usr/share/doc/arlinux-waybar'
         for directory in [source, *sorted((source/'subprojects').glob('*'))]:
             if not directory.is_dir():

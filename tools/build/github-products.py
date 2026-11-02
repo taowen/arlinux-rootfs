@@ -140,6 +140,10 @@ class Coordinator:
                 candidate=api(f"repos/{repository}/releases/tags/{self.plan['stages'][stage]['release']}", optional=True)
                 if candidate:
                     asset=next((a for a in candidate['assets'] if a['name']=='component.json'), None)
+                    if asset:
+                        asset=next((a for a in candidate['assets']
+                                    if a['name'].startswith('component-') and
+                                    a.get('digest')==asset.get('digest')),asset)
                     digest=asset.get('digest','') if asset else ''
                     if digest.startswith('sha256:'):
                         request['cacheSeed']=dict(repository=repository,
@@ -152,10 +156,6 @@ class Coordinator:
                         if seed['stage']!=stage:
                             raise ValueError('Cache seed belongs to a different component')
                         request['cacheSeed']['identity']=seed['identity']
-                        fixed=next((a for a in candidate['assets']
-                                    if a['name']=='component-'+seed['identity']+'.json'),None)
-                        if fixed:
-                            request['cacheSeed']['manifestUrl']=fixed['browser_download_url']
             payload=json.dumps(request,sort_keys=True)
             gh('workflow','run',self.plan['workflow'],'--repo',repository,'-f','request='+payload)
             print('START '+repository+'/'+stage,flush=True)

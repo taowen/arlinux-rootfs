@@ -59,6 +59,11 @@ if [ -n "${DISPLAY:-}" ] && [ -f "$HOME/.Xresources" ] && command -v xrdb >/dev/
     xrdb -merge "$HOME/.Xresources"
 fi
 
+# Each desktop owns one standard SNI host: a normal window or its panel.
+if [ "${ARLINUX_TRAY_PRESENTATION:-window}" = window ]; then
+    python3 /usr/lib/arlinux/guest/tray-window.py > "$XDG_RUNTIME_DIR/tray.log" 2>&1 &
+fi
+
 # One app drawer for every desktop, with this session's input and accessibility bus.
 python3 /usr/lib/arlinux/guest/yibu-launcher.py > "$XDG_RUNTIME_DIR/apps.log" 2>&1 &
 exec "$@"

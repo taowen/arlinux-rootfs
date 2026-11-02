@@ -84,7 +84,7 @@ def prepare(data, framework):
     if data['stage'] == 'linux-waybar':
         packages = ['build-essential', 'git', 'ninja-build', 'ccache', 'pkg-config', 'cmake',
                     'python3', 'python3-venv', 'zstd', 'libgtkmm-3.0-dev',
-                    'libwayland-dev', 'wayland-protocols', 'libxkbregistry-dev']
+                    'libwayland-dev', 'wayland-protocols', 'libxkbregistry-dev', 'libdbusmenu-gtk3-dev']
     elif data['stage'] == 'linux-ibus':
         packages = ['build-essential', 'git', 'python3', 'python3-venv', 'ccache', 'pkg-config',
                     'libglib2.0-dev', 'libgtk-3-dev', 'libdbus-1-dev', 'libdconf-dev',

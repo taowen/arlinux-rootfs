@@ -41,6 +41,11 @@ ARM64 runner. Yibu's shared base consumes its verified runtime tree; Classic
 and Sequoia still share the same Linux image. Sequoia supplies a standard GTK
 menu bar descriptor, so GTK owns anchoring, selection and keyboard navigation.
 The fork also accepts ordinary upstream context-menu descriptors.
+The same component builds unmodified, checksum-pinned `xembsni` for Sequoia's
+XEmbed-to-StatusNotifierItem bridge and enables Waybar's standard tray module.
+The bridge starts only in Sequoia, uses the existing desktop D-Bus/Xwayland session,
+and forwards clicks to the owning application. Classic and Yibu retain Wine's
+standalone tray. Rust is a runner build tool, not an installed guest dependency.
 Small checksum-pinned dependency wraps are linked statically to avoid coupling
 Debian guests to Ubuntu-specific C++ library sonames. GTK and glibc remain the
 distribution's libraries. The custom binary replaces the distribution Waybar;

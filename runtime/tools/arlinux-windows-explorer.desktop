@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Windows File Manager
+Name[zh_CN]=Windows 文件管理器
+Exec=arlinux-windows --explorer
+Icon=system-file-manager
+Terminal=true
+Categories=Windows;System;FileManager;
+StartupNotify=false

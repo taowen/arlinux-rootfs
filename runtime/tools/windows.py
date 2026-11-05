@@ -226,7 +226,8 @@ def dos_path(path):
 
 
 def launch(executable, arguments=(), prefix=None, dll_overrides=''):
-    executable = executable.resolve(strict=True)
+    """Open a local executable, or Wine Explorer when no file is supplied."""
+    executable = executable.resolve(strict=True) if executable is not None else 'explorer.exe'
     root = ensure_runtime()
     if prefix is not None and prefix.resolve() != instance_prefix().resolve():
         raise ValueError('Bionic Wine uses one instance prefix')
@@ -238,8 +239,8 @@ def launch(executable, arguments=(), prefix=None, dll_overrides=''):
     initialize(root, prefix, env)
     import windows_webview
     env = windows_webview.prepare(root, prefix, env)
-    windows_a11y.ensure(root, prefix, executable.stem, env)
-    if executable.suffix.lower() == '.lnk':
+    windows_a11y.ensure(root, prefix, Path(executable).stem, env)
+    if Path(executable).suffix.lower() == '.lnk':
         return run(root, prefix, 'start.exe', [str(executable), *arguments], env=env, timeout=None, task=True).returncode
     return run(root, prefix, executable, arguments, env=env, timeout=None, task=True).returncode
 
@@ -248,12 +249,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--prefix', type=Path, help='Wine data directory (contains pfx)')
     parser.add_argument('--dll-overrides', default='', help='DLL overrides for this application process')
-    parser.add_argument('executable', nargs='?', type=Path)
+    target = parser.add_mutually_exclusive_group(required=True)
+    target.add_argument('--explorer', action='store_true', help='Open Wine Explorer in the instance prefix')
+    target.add_argument('executable', nargs='?', type=Path)
     parser.add_argument('arguments', nargs=argparse.REMAINDER)
     args = parser.parse_args()
-    if not args.executable:
-        parser.error('Provide a Windows executable')
-    return launch(args.executable, args.arguments, args.prefix, args.dll_overrides)
+    arguments = args.arguments or (['C:\\'] if args.explorer else [])
+    return launch(args.executable, arguments, args.prefix, args.dll_overrides)
 
 
 if __name__ == '__main__':

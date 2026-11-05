@@ -49,6 +49,7 @@ def entries():
     if any(app.get_id() == 'arlinux-files.desktop' and app.should_show() for app in apps):
         # Keep one Files tile without changing native desktop menus or MIME defaults.
         apps = [app for app in apps if app.get_id() == 'arlinux-files.desktop'
+                or kind(app) != 'linux'
                 or 'FileManager' not in (app.get_categories() or '').split(';')]
     apps = [app for app in apps
             if app.should_show() and app.get_id() not in HIDDEN and "Settings" not in (app.get_categories() or "").split(";")]

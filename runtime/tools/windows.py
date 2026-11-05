@@ -90,6 +90,10 @@ def host_path(path):
     files = Path(os.environ['BIONICX_FILES']).resolve()
     if path.is_relative_to('/arlinux-shared'):
         return files/'arlinux-shared'/path.relative_to('/arlinux-shared')
+    if path.is_relative_to('/storage'):
+        return path
+    if path.is_relative_to('/Download'):
+        return Path(os.environ['ARLINUX_DOWNLOADS'])/path.relative_to('/Download')
     if path.is_relative_to(files):
         return path
     return Path(os.environ['BIONICX_ROOTFS'])/str(path).lstrip('/')

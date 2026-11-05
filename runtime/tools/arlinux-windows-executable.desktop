@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Windows Application
+Name[zh_CN]=Windows 应用
+Exec=arlinux-windows -- %f
+Icon=application-x-executable
+Terminal=true
+NoDisplay=true
+MimeType=application/x-ms-dos-executable;application/x-dosexec;application/vnd.microsoft.portable-executable;
+StartupNotify=false

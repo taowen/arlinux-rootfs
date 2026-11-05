@@ -28,7 +28,7 @@ def main():
         add(path, 'usr/lib/arlinux/guest/'+path.name)
     for path in sorted(source.glob('*.desktop')):
         add(path, 'usr/share/applications/'+path.name)
-    add(source/'browser-mimeapps.list', 'etc/xdg/mimeapps.list')
+    add(source/'mimeapps.list', 'etc/xdg/mimeapps.list')
     for path in sorted([*source.glob('*.png'), *source.glob('*.svg')]):
         add(path, 'usr/share/pixmaps/arlinux-'+path.name)
     for path in sorted(source.glob('arlinux-*')):

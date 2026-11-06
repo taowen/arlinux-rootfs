@@ -173,15 +173,16 @@ standard `xdg-open` associations, without installing a Linux browser. It require
 a host with the browser endpoint. Vendor menu shortcuts are hidden with
 `NoDisplay`, retaining their URL handlers for login callbacks; the on-demand
 shortcut remains visible in Apps.
-The same release supplies Android Pad Apps as `wps-pad.apk` and `capcut-pad.apks`.
-The Android host owns their catalog and private sandbox installation. The latter
+The same release supplies Android Pad Apps as `wps-pad.apk`, `capcut-pad.apks`
+and `adobe-premiere.apks`. The Android host owns their catalog, supported Android
+versions and private sandbox installation. Each `.apks` asset
 is a flat ZIP of original signed APKs, including `base.apk` and all required
 splits; never merge or re-sign the APKs. Keep these asset names when replacing
 installers. Both launchers read current digests from `SHA256SUMS` rather than
 requiring a code update. Preserve every release asset's checksum when updating:
 
 ```powershell
-$assets = 'qq-arm64.deb', 'wechat-arm64.deb', 'grok-bot-arm64.deb', 'wps-pad.apk', 'capcut-pad.apks'
+$assets = 'qq-arm64.deb', 'wechat-arm64.deb', 'grok-bot-arm64.deb', 'wps-pad.apk', 'capcut-pad.apks', 'adobe-premiere.apks'
 $sums = $assets | ForEach-Object { "$( (Get-FileHash $_ -Algorithm SHA256).Hash.ToLowerInvariant() )  $_" }
 [IO.File]::WriteAllText((Join-Path $PWD 'SHA256SUMS'), ($sums -join "`n") + "`n")
 gh release upload popular-apps @assets --clobber --repo taowen/arlinux-rootfs

@@ -32,9 +32,12 @@ def download(url,output,expected,label=None):
         transfer_url += ('&' if '?' in url else '?')+'arlinux_sha256='+expected
     error=''
     for attempt in range(8):
+        request_url=transfer_url
+        if attempt and transfer_url!=url:
+            request_url+='&arlinux_retry='+str(time.time_ns())
         command=['curl','--silent','--show-error','--location','--fail',
             '--continue-at','-','--connect-timeout','20','--max-time','600',
-            '--speed-time','90','--speed-limit','1024','--output',str(part),transfer_url]
+            '--speed-time','90','--speed-limit','1024','--output',str(part),request_url]
         started=time.monotonic()
         offset=part.stat().st_size if part.is_file() else 0
         with subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True) as process:

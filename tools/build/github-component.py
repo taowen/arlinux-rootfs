@@ -150,6 +150,39 @@ def prepare(data, framework):
         out.write('cache-paths<<ARLINUX_CACHE_PATHS\n'+'\n'.join(paths)+'\nARLINUX_CACHE_PATHS\n')
 
 
+def replace_component_outputs(root, archive, record):
+    stage=record['stage']
+    if stage in STANDALONE:
+        return
+    descriptor_name='framework/build/artifacts/components/'+stage+'.json'
+    import zstandard
+    with archive.open('rb') as compressed, zstandard.ZstdDecompressor().stream_reader(compressed) as decoded:
+        with tarfile.open(fileobj=decoded, mode='r|') as source:
+            member=next((m for m in source if m.name==descriptor_name),None)
+            if member is None or not member.isfile():
+                raise ValueError('Component capsule has no output descriptor')
+            descriptor=json.load(source.extractfile(member))
+    if descriptor['stage']!=stage:
+        raise ValueError('Component output descriptor belongs to a different stage')
+    state=descriptor['records'][stage]
+    contents=dict(outputs=state['outputs'],references=state['references'])
+    identity=hashlib.sha256(json.dumps(contents,sort_keys=True).encode()).hexdigest()
+    if identity!=record['outputIdentity']:
+        raise ValueError('Component output descriptor identity mismatch')
+    build=(root/'framework/build').resolve()
+    paths={Path(descriptor['output']), *(Path(name) for name in state['references'])}
+    for path in paths:
+        if (not path.is_absolute() or '..' in path.parts or
+                not path.resolve().is_relative_to(build) or path.resolve()==build):
+            raise ValueError('Component output ownership escapes the build directory')
+    for path in sorted(paths,key=lambda p:len(p.parts),reverse=True):
+        if path.is_symlink() or path.is_file():
+            path.unlink()
+        elif path.is_dir():
+            shutil.rmtree(path)
+    print('Replace declared component outputs: '+stage,flush=True)
+
+
 def import_dependency(root, dependency, visited=None, *, recursive=True):
     if visited is None:
         visited = set()
@@ -174,6 +207,7 @@ def import_dependency(root, dependency, visited=None, *, recursive=True):
                 shutil.copyfileobj(source, dest)
     if sha(archive) != record['archiveSha256']:
         raise ValueError('Reassembled component checksum mismatch')
+    replace_component_outputs(root,archive,record)
     def capsule_filter(member, destination):
         original_link = None
         if member.issym() and member.linkname.startswith('/'):

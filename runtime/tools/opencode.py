@@ -20,12 +20,40 @@ LAUNCHER = Path('/opt/OpenCode/.arlinux-launch')
 UPDATE_URL = 'https://opencode.ai/update/api/latest/desktop/opencode'
 
 
+def desktop_binary(entries, directory):
+    """Resolve the vendor's executable from its own standard desktop entries."""
+    executables = set()
+    for entry in entries:
+        desktop = configparser.ConfigParser(interpolation=None, strict=False)
+        desktop.read(entry)
+        command = shlex.split(desktop.get('Desktop Entry', 'Exec', fallback=''))
+        if not command or not Path(command[0]).is_absolute():
+            continue
+        candidate = Path(command[0])
+        try:
+            relative = candidate.relative_to('/opt/OpenCode')
+        except ValueError:
+            continue
+        candidate = directory / relative
+        if candidate.resolve().is_relative_to(directory.resolve()) and os.access(candidate, os.X_OK):
+            executables.add(candidate.resolve())
+    if len(executables) != 1:
+        raise RuntimeError('Vendor desktop entries do not identify one OpenCode executable')
+    return executables.pop()
+
+
 def installed_binary():
-    """Return the vendor executable, preserving offline legacy installations."""
     for path in (LAUNCHER, BINARY):
         if os.access(path, os.X_OK):
             return path.resolve()
+    if BINARY.parent.is_dir():
+        try:
+            return desktop_binary(Path('/usr/share/applications').glob('*opencode*.desktop'), BINARY.parent)
+        except RuntimeError:
+            pass
     return None
+
+
 GUEST = Path('/usr/lib/arlinux/guest')
 # A distribution may add its own notes, for example an Omarchy skill.
 DISTRIBUTION_AGENTS = Path('/etc/arlinux/opencode-AGENTS.md')
@@ -136,53 +164,42 @@ def install():
     package = shared.download(url, expected, '.' + extension)
     env = dict(os.environ, DEBIAN_FRONTEND='noninteractive')
     if extension == 'deb':
+        fields = subprocess.check_output(
+            ['dpkg-deb', '-f', str(package), 'Package', 'Architecture'], text=True).splitlines()
+        if fields != ['Package: opencode', 'Architecture: arm64']:
+            raise ValueError('OpenCode package identity or architecture does not match')
         subprocess.run(['sudo', 'apt-get', 'update'], env=env, check=True)
-        dependencies = subprocess.check_output(
-            ['dpkg-deb', '-f', str(package), 'Depends'], text=True).strip()
-        dependencies = ', '.join(filter(None, (dependencies, 'adb')))
-        subprocess.run(['sudo', 'apt-get', 'satisfy', '-y', '--no-install-recommends',
-                        dependencies], env=env, check=True)
+        # Install through the vendor-supported package manager so its in-app
+        # DebUpdater can replace this installation. Remove only our legacy link;
+        # never unpack a package update into an immutable shared payload.
+        if BINARY.parent.is_symlink():
+            BINARY.parent.unlink()
+        subprocess.run(['sudo', 'apt-get', 'install', '-y', '--no-install-recommends',
+                        str(package), 'adb'], env=env, check=True)
     else:
-        # The official ARM64 RPM contains an ordinary Linux application payload.
+        # Arch consumes the official RPM payload; RPM self-update is unavailable.
         subprocess.run(['sudo', 'pacman', '-S', '--needed', '--noconfirm',
                         'libarchive', 'gtk3', 'nss', 'libxss', 'libxtst', 'libsecret',
                         'alsa-plugins', 'libpulse', 'cups', 'libdrm', 'mesa',
                         'android-tools'], check=True)
-    # Share only the vendor's self-contained application, not distro libraries.
-    payloads = shared.directory('opencode')
-    destination = payloads / expected
-    with shared.locked(payloads / 'extract.lock'):
-        if not destination.is_dir():
-            with tempfile.TemporaryDirectory(prefix='extract-', dir=payloads) as temporary:
-                stage = Path(temporary)
-                if extension == 'deb':
-                    subprocess.run(['dpkg-deb', '-x', str(package), str(stage)], check=True)
-                else:
+        # Share only the vendor's self-contained application, not distro libraries.
+        payloads = shared.directory('opencode')
+        destination = payloads / expected
+        with shared.locked(payloads / 'extract.lock'):
+            if not destination.is_dir():
+                with tempfile.TemporaryDirectory(prefix='extract-', dir=payloads) as temporary:
+                    stage = Path(temporary)
                     subprocess.run(['bsdtar', '-xpf', str(package), '-C', str(stage)], check=True)
-                app = stage / 'opt/OpenCode'
-                # The vendor may rename its binary without changing the package
-                # version. Read the package's desktop entry, not a filename list.
-                executables = set()
-                for entry in (stage / 'usr/share/applications').glob('*.desktop'):
-                    desktop = configparser.ConfigParser(interpolation=None, strict=False)
-                    desktop.read(entry)
-                    command = shlex.split(desktop.get('Desktop Entry', 'Exec', fallback=''))
-                    if not command or not command[0].startswith('/opt/OpenCode/'):
-                        continue
-                    relative = Path(command[0]).relative_to('/opt/OpenCode')
-                    candidate = app / relative
-                    if candidate.resolve().is_relative_to(app.resolve()) and os.access(candidate, os.X_OK):
-                        executables.add(relative)
-                if len(executables) != 1:
-                    raise RuntimeError('Vendor desktop entries do not identify one OpenCode executable')
-                (app / LAUNCHER.name).symlink_to(executables.pop())
-                app.rename(destination)
-    BINARY.parent.parent.mkdir(parents=True, exist_ok=True)
-    if BINARY.parent.is_symlink():
-        BINARY.parent.unlink()
-    if not BINARY.parent.exists():
-        BINARY.parent.symlink_to(destination, target_is_directory=True)
-    if not os.access(LAUNCHER, os.X_OK):
+                    app = stage / 'opt/OpenCode'
+                    executable = desktop_binary((stage / 'usr/share/applications').glob('*.desktop'), app)
+                    (app / LAUNCHER.name).symlink_to(executable.relative_to(app.resolve()))
+                    app.rename(destination)
+        BINARY.parent.parent.mkdir(parents=True, exist_ok=True)
+        if BINARY.parent.is_symlink():
+            BINARY.parent.unlink()
+        if not BINARY.parent.exists():
+            BINARY.parent.symlink_to(destination, target_is_directory=True)
+    if installed_binary() is None:
         raise RuntimeError('OpenCode executable missing after installation')
     # Keep one Apps entry: the package ships two vendor launchers. Standard
     # per-user desktop overrides hide them without modifying package files.
@@ -196,14 +213,15 @@ def install():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--desktop', action='store_true', help='Keep errors visible in the launcher terminal')
-    parser.parse_args()
+    parser.add_argument('--update', action='store_true', help='Download and install the current official release')
+    args = parser.parse_args()
     cache = Path(os.environ.get('XDG_CACHE_HOME', Path.home() / '.cache')) / 'arlinux/opencode'
     cache.mkdir(parents=True, exist_ok=True)
     with (cache / 'install.lock').open('w') as lock:
         if installed_binary() is None:
             print('Checking OpenCode installation…', flush=True)
         fcntl.flock(lock, fcntl.LOCK_EX)
-        if installed_binary() is None:
+        if args.update or installed_binary() is None or (Path('/usr/bin/apt-get').exists() and BINARY.parent.is_symlink()):
             install()
     install_instructions()
     # Keep the same accessibility and rendering path for Apps and voice AI.

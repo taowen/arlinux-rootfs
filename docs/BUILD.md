@@ -96,6 +96,14 @@ Each product has its own content identity, publication, capsule and download cac
 Changes to these application scripts do not invalidate the base rootfs.
 The OpenCode launcher rewrites its managed `AGENTS.md` section on every start and
 appends `/etc/arlinux/opencode-AGENTS.md` when a distribution provides one.
+On Debian, OpenCode is installed through APT from the verified official DEB,
+so its native DEB updater updates an ordinary package-managed installation.
+Legacy shared-payload links migrate on the next launch without deleting their
+shared payload or user settings. `arlinux-opencode --update` explicitly installs
+the latest official release; Arch's extracted RPM uses this launcher update path.
+Grok Bot's DEB registers its official signed APT source. Its launcher refreshes
+that source and upgrades the installed package before opening the app; the
+vendor's Linux "Restart to update" control only restarts after package upgrades.
 Shared agent guidance lives in `runtime/tools/guest/agent-AGENTS.md`; OpenCode's
 own adapter only describes its integration-specific behavior. Other assistants
 can read `/usr/lib/arlinux/guest/agent-AGENTS.md` and the Python API source under

@@ -25,11 +25,13 @@ class Application:
     flags: tuple[str, ...] = ()
     dependencies: tuple[str, ...] = ()
     environment: dict[str, str] = field(default_factory=dict)
+    repository_updates: bool = False
 
 
 APPS = {
     'grok-bot': Application('grok-bot', '/usr/bin/grok-bot', 'grok-bot.desktop',
-                            flags=('--force-renderer-accessibility',), dependencies=('adb',)),
+                            flags=('--force-renderer-accessibility',), dependencies=('adb',),
+                            repository_updates=True),
     'qq': Application('linuxqq', '/opt/QQ/qq', 'qq.desktop', flags=('--force-renderer-accessibility',)),
     # The vendor DEB omits NSS. Its Qt build scales the Wayland surface but
     # leaves its painted controls at 1x, producing transparent input regions.
@@ -82,6 +84,15 @@ def main() -> None:
             install(args.application, app)
             if not installed(app):
                 raise RuntimeError('Application installation did not complete')
+        if app.repository_updates:
+            # The official DEB registers its signed APT repository. Its desktop
+            # updater intentionally delegates Linux upgrades to that repository;
+            # "Restart to update" alone cannot install a newer package.
+            print(f'Checking official {args.application} package updates…', flush=True)
+            env = dict(os.environ, DEBIAN_FRONTEND='noninteractive')
+            subprocess.run(['sudo', 'apt-get', 'update'], check=True, env=env)
+            subprocess.run(['sudo', 'apt-get', 'install', '-y', '--only-upgrade',
+                            '--no-install-recommends', app.package], check=True, env=env)
     # Hide the duplicate menu entry, but retain the vendor's URL handlers for
     # browser sign-in callbacks. Preserve any existing user override.
     applications = Path(os.environ.get('XDG_DATA_HOME', Path.home()/'.local/share'))/'applications'

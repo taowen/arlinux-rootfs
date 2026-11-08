@@ -4,11 +4,51 @@ from pathlib import Path
 import re
 import subprocess
 import time
+from urllib.parse import unquote,urlsplit
 
 
 def sha256_file(path):
     with Path(path).open('rb') as stream:
         return hashlib.file_digest(stream,'sha256').hexdigest()
+
+
+def github_release_asset(url):
+    parsed=urlsplit(url)
+    if parsed.scheme!='https' or parsed.netloc!='github.com':
+        return None
+    try:
+        repository,asset_path=parsed.path.strip('/').split('/releases/download/',1)
+        owner,name=repository.split('/')
+        tag,asset=asset_path.rsplit('/',1)
+    except ValueError:
+        return None
+    return owner+'/'+name,unquote(tag),unquote(asset)
+
+
+def transfer(command,part,label):
+    started=time.monotonic()
+    offset=part.stat().st_size if part.is_file() else 0
+    with subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True) as process:
+        try:
+            while True:
+                try:
+                    stdout,stderr=process.communicate(timeout=15)
+                    break
+                except subprocess.TimeoutExpired:
+                    size=part.stat().st_size if part.is_file() else 0
+                    elapsed=time.monotonic()-started
+                    rate=max(0,size-offset)/max(1,elapsed)/(1024*1024)
+                    print(f'Transfer {label}: {size/(1024*1024):.1f} MiB retained, {rate:.2f} MiB/s',flush=True)
+                    if elapsed>=600:
+                        process.kill()
+                        stdout,stderr=process.communicate()
+                        stderr+='\nTransfer exceeded 600 seconds'
+                        break
+        except BaseException:
+            process.kill()
+            process.communicate()
+            raise
+    return subprocess.CompletedProcess(command,process.returncode,stdout,stderr)
 
 
 def download(url,output,expected,label=None):
@@ -21,6 +61,7 @@ def download(url,output,expected,label=None):
     # A complete file from an older fixed release is not a partial download
     # of this generation. Keep resumable bytes bound to the expected digest.
     part=output.with_name(output.name+'.'+expected+'.part')
+    api_part=part.with_name(part.name+'.api')
     if output.is_file():
         output.unlink()
     # A process may stop after receiving the last byte but before renaming.
@@ -31,37 +72,37 @@ def download(url,output,expected,label=None):
     if url.startswith('https://github.com/') and '/releases/download/' in url:
         transfer_url += ('&' if '?' in url else '?')+'arlinux_sha256='+expected
     error=''
+    release=github_release_asset(url)
     for attempt in range(8):
         request_url=transfer_url
         if attempt and transfer_url!=url:
             request_url+='&arlinux_retry='+str(time.time_ns())
-        command=['curl','--silent','--show-error','--location','--fail',
-            '--continue-at','-','--connect-timeout','20','--max-time','600',
-            '--speed-time','90','--speed-limit','1024','--output',str(part),request_url]
-        started=time.monotonic()
-        offset=part.stat().st_size if part.is_file() else 0
-        with subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True) as process:
-            try:
-                while True:
-                    try:
-                        stdout,stderr=process.communicate(timeout=15)
-                        break
-                    except subprocess.TimeoutExpired:
-                        size=part.stat().st_size if part.is_file() else 0
-                        rate=max(0,size-offset)/max(1,time.monotonic()-started)/(1024*1024)
-                        print(f'Transfer {label or output.name}: {size/(1024*1024):.1f} MiB retained, {rate:.2f} MiB/s',flush=True)
-            except BaseException:
-                process.kill()
-                process.communicate()
-                raise
-        result=subprocess.CompletedProcess(command,process.returncode,stdout,stderr)
-        if result.returncode==0 and part.is_file() and sha256_file(part)==expected:
-            part.replace(output)
+        target=part
+        if release and attempt%2:
+            repository,tag,asset=release
+            target=api_part
+            command=['gh','release','download','--repo',repository,'--pattern',asset,
+                     '--output',str(target),'--clobber','--',tag]
+            print('Retry using GitHub Release API: '+(label or output.name),flush=True)
+        else:
+            command=['curl','--silent','--show-error','--location','--fail',
+                '--continue-at','-','--connect-timeout','20','--max-time','600',
+                '--speed-time','90','--speed-limit','1024','--output',str(part),request_url]
+        try:
+            result=transfer(command,target,label or output.name)
+        except BaseException:
+            if target==api_part:
+                api_part.unlink(missing_ok=True)
+            raise
+        if result.returncode==0 and target.is_file() and sha256_file(target)==expected:
+            target.replace(output)
+            part.unlink(missing_ok=True)
+            api_part.unlink(missing_ok=True)
             return output
         error=result.stderr.strip() or 'SHA-256 mismatch'
-        if result.returncode in (0,33) or (result.returncode==22 and '416' in result.stderr):
+        if target==api_part or result.returncode in (0,33) or (result.returncode==22 and '416' in result.stderr):
             # The server rejected ranges, or a complete file was corrupted.
-            part.unlink(missing_ok=True)
+            target.unlink(missing_ok=True)
         if attempt<7:
             print(f'Retry verified download {output.name}: {error[-200:]}',flush=True)
             time.sleep(min(2**attempt,16))

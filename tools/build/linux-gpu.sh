@@ -47,11 +47,20 @@ sys.path.insert(0,str(Path(sys.argv[1])/'tools/build'))
 from pipeline_cache import inventory
 try:
     record=json.loads(Path(sys.argv[3]).read_text())
-    valid=(record.get('format') == 1 and record.get('inputs') == sys.argv[2]
-           and record.get('outputs') == {path:inventory(path) for path in sys.argv[4:]})
-except (OSError, ValueError):
-    valid=False
-raise SystemExit(0 if valid else 1)
+    if record.get('format') != 1:
+        raise ValueError('Unsupported GPU receipt format')
+    if record.get('inputs') != sys.argv[2]:
+        raise ValueError('GPU producer inputs differ: recorded='+str(record.get('inputs'))+
+                         ' current='+sys.argv[2])
+    actual={path:inventory(path) for path in sys.argv[4:]}
+    if record.get('outputs') != actual:
+        expected=record.get('outputs',{})
+        changes=[path for path in sorted(expected.keys()|actual.keys())
+                 if expected.get(path) != actual.get(path)]
+        raise ValueError('GPU output hashes differ: '+', '.join(changes))
+except (OSError, ValueError) as error:
+    print('GPU cache rejected: '+str(error),file=sys.stderr)
+    raise SystemExit(1)
 CACHE
 }
 if [[ "$component" == all && -f "$gpu_receipt" ]] && verify_gpu_cache; then

@@ -413,20 +413,21 @@ Distribution-only jobs skip deletion of unrelated preinstalled runner SDKs.
 
 Actions-restored stage generations take precedence over older release seeds;
 the ordinary pipeline input/output verification still decides whether they can
-be reused. This prevents an older seed overwriting restored Mesa outputs and
-triggering an unnecessary rebuild and published-output mismatch.
-The [Mesa verification](https://github.com/taowen/mesa/actions/runs/39150751054/attempts/2)
-passed in 75 and 62 seconds overall, with build steps of 2 and 1 seconds and
-identical published output. The [Yibu verification](https://github.com/taowen/arlinux-yibu/actions/runs/39150885091/attempts/2)
-passed in 99 and 75 seconds, with a 9-second build step on the repeat.
+be reused. Dependency imports verify the component descriptor's output identity
+and replace its declared output/reference paths before extraction. They must
+not merge a new installation into an old directory: files removed by a producer
+must also disappear from its consumers. Replacement is restricted to declared
+paths inside the build directory.
 
 Capsule imports stream decompression into tar extraction without writing an
-intermediate full tar. Hosted tests retain executable/read-only modes, symlinks
-and hardlinks across repeated imports and reject corrupt or escaping archives.
+intermediate full tar. Imports preserve executable/read-only modes, symlinks
+and hardlinks and reject corrupt or escaping archives before consumption.
 
 Workstation product downloads persist manifests, partial transfers and verified
 capsules under shared `github-state/downloads/COMPONENT_ID` directories. A lock
-serializes concurrent consumers of the same component. Missing parts download
+serializes concurrent consumers of the same component. GitHub release downloads
+use the Release API when browser download endpoints fail; both routes verify
+the same declared SHA-256. Parts download
 in parallel (up to four); completed partial files are verified and promoted
 without another request. Interruptions retain
 verified parts and partial files for resumption; after assembling and checking

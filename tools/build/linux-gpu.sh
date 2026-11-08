@@ -13,7 +13,7 @@ mesa_changes="$(git -C "$repo/third_party/mesa" diff --binary HEAD | sha256sum |
 mesa_cache="$cache_root/mesa-$mesa_revision-$mesa_changes"
 mesa_source="$mesa_cache/source"
 mesa_build="$mesa_cache/build"
-gpu_id="$({
+gpu_inputs="$({
     uname -m
     aarch64-linux-gnu-gcc --version
     aarch64-linux-gnu-g++ --version
@@ -33,14 +33,15 @@ gpu_id="$({
         sha256sum tools/build/linux-gpu.sh tools/build/linux-aarch64.ini
         find third_party/libhybris/arlinux/graphics-protocols -type f -print0 | sort -z | xargs -0 sha256sum
     })
-} | sha256sum | cut -d' ' -f1)"
+})"
+gpu_id="$(printf '%s\n' "$gpu_inputs" | sha256sum | cut -d' ' -f1)"
 gpu_id_file="$repo/build/linux/gpu.inputs.sha256"
 
 gpu_receipt="$repo/build/linux/gpu.outputs.json"
 verify_gpu_cache() {
     local receipt="${1:-$gpu_receipt}"
     if [[ $# -gt 0 ]]; then shift; else set -- "$mesa_install" "$hybris_stage/install"; fi
-    python3 - "$repo" "$gpu_id" "$receipt" "$@" <<'CACHE'
+    python3 - "$repo" "$gpu_id" "$receipt" "$gpu_inputs" "$@" <<'CACHE'
 import json,sys
 from pathlib import Path
 sys.path.insert(0,str(Path(sys.argv[1])/'tools/build'))
@@ -50,14 +51,24 @@ try:
     if record.get('format') != 1:
         raise ValueError('Unsupported GPU receipt format')
     if record.get('inputs') != sys.argv[2]:
+        import difflib
+        difference=difflib.unified_diff(record.get('inputDetails','').splitlines(),
+            sys.argv[4].splitlines(),fromfile='producer',tofile='consumer',lineterm='')
+        print('\n'.join(difference),file=sys.stderr)
         raise ValueError('GPU producer inputs differ: recorded='+str(record.get('inputs'))+
                          ' current='+sys.argv[2])
-    actual={path:inventory(path) for path in sys.argv[4:]}
+    actual={path:inventory(path) for path in sys.argv[5:]}
     if record.get('outputs') != actual:
+        import itertools
         expected=record.get('outputs',{})
-        changes=[path for path in sorted(expected.keys()|actual.keys())
-                 if expected.get(path) != actual.get(path)]
-        raise ValueError('GPU output hashes differ: '+', '.join(changes))
+        def differences(before,after,path=''):
+            if isinstance(before,dict) and isinstance(after,dict):
+                for key in sorted(before.keys()|after.keys()):
+                    yield from differences(before.get(key),after.get(key),path+'/'+key)
+            elif before != after:
+                yield path+': recorded='+repr(before)+' current='+repr(after)
+        changes=list(itertools.islice(differences(expected,actual),8))
+        raise ValueError('GPU output hashes differ:\n'+'\n'.join(changes))
 except (OSError, ValueError) as error:
     print('GPU cache rejected: '+str(error),file=sys.stderr)
     raise SystemExit(1)
@@ -149,14 +160,15 @@ build_hybris() {
 }
 
 write_gpu_receipt() {
-python3 - "$repo" "$gpu_id" "$@" <<'RECEIPT'
+python3 - "$repo" "$gpu_id" "$1" "$gpu_inputs" "${@:2}" <<'RECEIPT'
 import json,sys
 from pathlib import Path
 sys.path.insert(0,str(Path(sys.argv[1])/'tools/build'))
 from pipeline_cache import inventory
 receipt=Path(sys.argv[3]); pending=receipt.with_suffix('.json.part')
 pending.write_text(json.dumps({'format':1,'inputs':sys.argv[2],
-                              'outputs':{path:inventory(path) for path in sys.argv[4:]}},sort_keys=True)+'\n')
+                              'inputDetails':sys.argv[4],
+                              'outputs':{path:inventory(path) for path in sys.argv[5:]}},sort_keys=True)+'\n')
 pending.replace(receipt)
 RECEIPT
 }

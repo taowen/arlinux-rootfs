@@ -13,6 +13,7 @@ from pipeline_cache import Cache, digest, inventory
 
 VERSION = '1.5.35-rc1'
 SOURCE_SHA256 = 'd4fe3751b6fc496471af74fe618a9c96ae3d71a08574cccb00eb1984d489ec2b'
+SOURCE_URL = 'https://github.com/ibus/ibus/releases/download/1.5.35/ibus-1.5.35-rc1.tar.gz'
 PREFIX = '/usr/lib/arlinux/ibus'
 
 
@@ -36,8 +37,7 @@ def main():
         if work.exists():
             shutil.rmtree(work)
         work.mkdir(parents=True)
-        archive = download(f'https://github.com/ibus/ibus/releases/download/{VERSION}/ibus-{VERSION}.tar.gz',
-                           work/'source.tar.gz', SOURCE_SHA256)
+        archive = download(SOURCE_URL, work/'source.tar.gz', SOURCE_SHA256)
         with tarfile.open(archive) as source:
             source.extractall(work, filter='data')
         source = work/f'ibus-{VERSION}'

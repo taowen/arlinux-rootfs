@@ -66,6 +66,12 @@ The probe establishes hardware Vulkan initialization, not application compatibil
 Zink/OpenGL and individual applications can require additional vendor features;
 fallback cannot supply an unimplemented feature such as timeline semaphores.
 
+Turnip on Adreno 830 uses GPU-accelerated sysmem rendering. GMEM rendering is
+disabled in the device configuration because it can corrupt application frames.
+This applies to the GPU rather than individual applications; other GPUs keep
+their existing render-mode selection. Sysmem can consume more memory bandwidth
+than GMEM. Debug flags cannot override this correctness restriction.
+
 ## Steam native Linux graphics
 
 `runtime/tools/steam_fex.py` prepares the graphics provider consumed by Valve's

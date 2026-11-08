@@ -101,9 +101,9 @@ so its native DEB updater updates an ordinary package-managed installation.
 Legacy shared-payload links migrate on the next launch without deleting their
 shared payload or user settings. `arlinux-opencode --update` explicitly installs
 the latest official release; Arch's extracted RPM uses this launcher update path.
-Grok Bot's DEB registers its official signed APT source. Its launcher refreshes
-that source and upgrades the installed package before opening the app; the
-vendor's Linux "Restart to update" control only restarts after package upgrades.
+Grok Bot's DEB registers its official signed APT source. Users perform upgrades
+through the vendor's package-manager instructions; its Linux "Restart to update"
+control only restarts after package upgrades. The launcher does not auto-upgrade it.
 Shared agent guidance lives in `runtime/tools/guest/agent-AGENTS.md`; OpenCode's
 own adapter only describes its integration-specific behavior. Other assistants
 can read `/usr/lib/arlinux/guest/agent-AGENTS.md` and the Python API source under

@@ -51,6 +51,11 @@ there is no second panel executable or compositor.
 
 ## GPU driver selection
 
+Turnip uses system-memory (sysmem) rendering on every supported GPU and kernel
+backend. This policy is implemented in the shared Mesa fork, not per application
+or phone model. It avoids the GMEM rendering path while retaining GPU acceleration;
+its bandwidth, power and performance costs depend on the workload.
+
 Android probes the installed Linux Vulkan ICD before selecting a GPU overlay.
 Devices with kgsl try Turnip first; initialization failure selects the generic
 libhybris/vendor-driver overlay instead. Each candidate must create a hardware

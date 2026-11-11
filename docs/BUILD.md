@@ -52,8 +52,9 @@ there is no second panel executable or compositor.
 ## GPU driver selection
 
 Turnip uses system-memory (sysmem) rendering on every supported GPU and kernel
-backend. This policy is implemented in the shared Mesa fork, not per application
-or phone model. It avoids the GMEM rendering path while retaining GPU acceleration;
+backend through `freedreno-force-sysmem=true` in the Linux build recipe. Bionic
+Wine pins the same Mesa revision with this option disabled. This is not an
+application or phone-model rule. It avoids GMEM while retaining GPU acceleration;
 its bandwidth, power and performance costs depend on the workload.
 
 Android probes the installed Linux Vulkan ICD before selecting a GPU overlay.

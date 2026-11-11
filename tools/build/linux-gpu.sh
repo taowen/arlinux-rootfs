@@ -92,7 +92,7 @@ build_mesa() {
         -Dpkg_config_path="$repo/third_party/libhybris/arlinux/graphics-protocols"
         --prefix="$mesa_install" --libdir=lib --buildtype=release
         -Dauto_features=disabled -Dgallium-drivers=zink
-        -Dvulkan-drivers=freedreno -Dfreedreno-kmds=kgsl
+        -Dvulkan-drivers=freedreno -Dfreedreno-kmds=kgsl -Dfreedreno-force-sysmem=true
         -Dplatforms=x11,wayland -Darlinux-wsi=true
         -Degl-native-platform=auto -Degl=enabled -Dgles1=disabled
         -Dgles2=enabled -Dopengl=true -Dglx=dri -Dgbm=enabled -Dglvnd=enabled

@@ -60,7 +60,13 @@ its bandwidth, power and performance costs depend on the workload.
 Android probes the installed Linux Vulkan ICD before selecting a GPU overlay.
 Devices with kgsl try Turnip first; initialization failure selects the generic
 libhybris/vendor-driver overlay instead. Each candidate must create a hardware
-graphics device. Selection is reused only for the same overlay hashes and Android
+graphics device and allocate/bind a color image, CPU upload buffer, index buffer
+and indirect buffer using each resource's actual `memoryTypeBits`. The upload
+allocation must also support mapping and flushing when noncoherent. The probe
+reports the masks and chosen types; it does not assume that images and different
+buffer usages share a device-local memory type. This matters for vendor layouts
+such as XRing O1/O3. No phone-model override is needed for this selection.
+Selection is reused only for the same overlay hashes and Android
 build fingerprint, so updated Mesa or vendor drivers trigger another probe.
 New bundles declare `gpuCapabilityProbe=1` in `guest.properties`. Older imported
 bundles retain their original GPU selection until the distribution is replaced;
@@ -68,7 +74,8 @@ an APK update alone does not replace their graphics payloads.
 All Linux clients, including Zink/OpenGL applications such as Blender, inherit
 the selected ICD. Bionic Wine separately probes its own binaries in the Wine
 installer; Linux driver success does not establish Bionic driver support.
-The probe establishes hardware Vulkan initialization, not application compatibility.
+The probe establishes hardware Vulkan initialization and basic resource memory
+availability, not rendering correctness or application compatibility.
 Zink/OpenGL and individual applications can require additional vendor features;
 fallback cannot supply an unimplemented feature such as timeline semaphores.
 

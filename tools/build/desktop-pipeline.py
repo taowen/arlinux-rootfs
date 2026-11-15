@@ -24,7 +24,7 @@ def rootfs_sources(framework, product):
     for name in ('third_party/mesa', 'third_party/libhybris',
                  'third_party/android-headers', 'distributions/' + product):
         inputs[name] = source_state(framework / name)
-    for name in ('linux-assets.sh', 'linux-gpu.sh', 'linux-aarch64.ini',
+    for name in ('linux-assets.sh', 'vulkan-probe.c', 'linux-gpu.sh', 'linux-aarch64.ini',
                  'mesa-debs.py', 'mesa-arch.py', 'doctor.sh',
                  'package-rootfs.py', 'package-rootfs.sh', 'pipeline_cache.py', 'component_inputs.py'):
         inputs['tools/build/' + name] = inventory(framework / 'tools/build' / name)

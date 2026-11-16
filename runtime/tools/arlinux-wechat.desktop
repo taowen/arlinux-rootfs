@@ -11,3 +11,4 @@ Icon=/usr/share/pixmaps/arlinux-wechat.png
 Terminal=true
 Categories=Network;InstantMessaging;
 StartupNotify=false
+MimeType=x-scheme-handler/weixin;

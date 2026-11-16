@@ -223,12 +223,20 @@ APM container is launched. Its bundled icon comes from Spark's WorkBuddy catalog
 Tencent retains ownership of the application and icon. Vendor agreements apply.
 The launchers register declared URI schemes only when no handler is configured;
 WeChat handles `weixin://` through its native Linux client, preserving user defaults.
+`wechat_links.py` shares Linux handler lookup, direct `weixin://` dispatch and
+official `wxmpurl.cn` URL Link resolution across application integrations. It
+does not own accounts, credentials or callback servers. Each service retains
+its own authorized entry point, session/state and callback protocol; WorkBuddy's
+mini-program and URL Link generation API must not be reused for other services.
 WorkBuddy scopes a browser delegate to its own process. Its desktop sign-in URL
 is carried unchanged into the official WorkBuddy mini-program webview through
 Tencent's URL Link service, so authorization completes the pending desktop session
 instead of only opening the mini-program home page. It requires an installed,
 logged-in Linux WeChat. Other pages, missing WeChat and provider handoff failures
 use the ordinary browser sign-in; no credentials or authorization URLs are logged.
+Linux WeChat itself uses its native device-login flow, not third-party OAuth.
+First login and any later verification remain in WeChat's own QR/phone confirmation
+UI; a LargeDroid OAuth code is not a Linux WeChat client session.
 
 The bundled QQ and WeChat icons come from those official packages. Tencent owns
 the applications and icons; their vendor licenses and first-run agreements apply.

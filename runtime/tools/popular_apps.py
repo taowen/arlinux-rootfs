@@ -35,6 +35,7 @@ APPS = {
     'workbuddy': Application('workbuddy', '/opt/WorkBuddy/workbuddy', 'workbuddy.desktop',
                             flags=('--force-renderer-accessibility', '--ozone-platform=x11'),
                             dependencies=('adb',), agent=True,
+                            environment={'ARLINUX_BROWSER_HANDLER': '/usr/lib/arlinux/workbuddy_browser.py'},
                             installer=('https://mirrors.sdu.edu.cn/spark-store/arm64-store/office/workbuddy/'
                                        'workbuddy_5.6.2.40046327_arm64.deb',
                                        '561822578435d382a06d0a0b079a4b157f68b588c9fe72d589e2a88b2fd155fa')),

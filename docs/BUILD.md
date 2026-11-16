@@ -215,6 +215,13 @@ update rejects a mismatched download and can retry; it never skips verification.
 The checksum file uses an ordinary release download, avoiding anonymous API
 rate limits during installation.
 
+The WorkBuddy entry uses the native ARM64 DEB from Spark Store's SDU mirror,
+with its release SHA-256 pinned in `popular_apps.py`. It shares the existing
+first-use installation, download cache and agent environment; no store UI or
+APM container is launched. Its bundled icon comes from Spark's WorkBuddy catalog
+(`https://cdn.d.store.deepinos.org.cn/store/office/workbuddy/icon.png`);
+Tencent retains ownership of the application and icon. Vendor agreements apply.
+
 The bundled QQ and WeChat icons come from those official packages. Tencent owns
 the applications and icons; their vendor licenses and first-run agreements apply.
 

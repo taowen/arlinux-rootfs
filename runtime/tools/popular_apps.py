@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install repository-hosted official ARM64 DEBs on first use, then launch them."""
+"""Install checksum-verified ARM64 DEBs on first use, then launch them."""
 import argparse
 import configparser
 from dataclasses import dataclass, field
@@ -25,11 +25,19 @@ class Application:
     flags: tuple[str, ...] = ()
     dependencies: tuple[str, ...] = ()
     environment: dict[str, str] = field(default_factory=dict)
+    installer: tuple[str, str] | None = None
+    agent: bool = False
 
 
 APPS = {
+    'workbuddy': Application('workbuddy', '/opt/WorkBuddy/workbuddy', 'workbuddy.desktop',
+                            flags=('--force-renderer-accessibility', '--ozone-platform=x11'),
+                            dependencies=('adb',), agent=True,
+                            installer=('https://mirrors.sdu.edu.cn/spark-store/arm64-store/office/workbuddy/'
+                                       'workbuddy_5.6.2.40046327_arm64.deb',
+                                       '561822578435d382a06d0a0b079a4b157f68b588c9fe72d589e2a88b2fd155fa')),
     'grok-bot': Application('grok-bot', '/usr/bin/grok-bot', 'grok-bot.desktop',
-                            flags=('--force-renderer-accessibility',), dependencies=('adb',)),
+                            flags=('--force-renderer-accessibility',), dependencies=('adb',), agent=True),
     'qq': Application('linuxqq', '/opt/QQ/qq', 'qq.desktop', flags=('--force-renderer-accessibility',)),
     # The vendor DEB omits NSS. Its Qt build scales the Wayland surface but
     # leaves its painted controls at 1x, producing transparent input regions.
@@ -48,14 +56,18 @@ def installed(app: Application) -> bool:
 
 
 def install(name: str, app: Application) -> None:
-    asset_name = name + '-arm64.deb'
-    checksums = shared.github_metadata(DOWNLOAD + 'SHA256SUMS').decode('ascii')
-    pattern = re.compile(r'([0-9a-f]{64})  ' + re.escape(asset_name))
-    matches = [match.group(1) for line in checksums.splitlines()
-               if (match := pattern.fullmatch(line)) is not None]
-    if len(matches) != 1:
-        raise ValueError(f'Missing or ambiguous installer checksum: {asset_name}')
-    installer = shared.download(DOWNLOAD + asset_name, matches[0], '.deb')
+    if app.installer is not None:
+        url, expected = app.installer
+    else:
+        asset_name = name + '-arm64.deb'
+        checksums = shared.github_metadata(DOWNLOAD + 'SHA256SUMS').decode('ascii')
+        pattern = re.compile(r'([0-9a-f]{64})  ' + re.escape(asset_name))
+        matches = [match.group(1) for line in checksums.splitlines()
+                   if (match := pattern.fullmatch(line)) is not None]
+        if len(matches) != 1:
+            raise ValueError(f'Missing or ambiguous installer checksum: {asset_name}')
+        url, expected = DOWNLOAD + asset_name, matches[0]
+    installer = shared.download(url, expected, '.deb')
     fields = subprocess.check_output(['dpkg-deb', '-f', str(installer), 'Package', 'Architecture'], text=True)
     if fields.splitlines() != [f'Package: {app.package}', 'Architecture: arm64']:
         raise ValueError('Installer package or architecture does not match the application')
@@ -96,7 +108,7 @@ def main() -> None:
             entry.write(output, space_around_delimiters=False)
     except FileExistsError:
         pass
-    env = (agent_context.environment(os.environ) if args.application == 'grok-bot'
+    env = (agent_context.environment(os.environ) if app.agent
            else desktop_bus.environment(os.environ))
     env.update(app.environment)
     with (cache/(args.application + '.log')).open('ab') as log:

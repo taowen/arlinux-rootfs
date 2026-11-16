@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=WorkBuddy
+Comment=Download WorkBuddy from Spark Store on first use, then launch the AI agent
+Comment[zh_CN]=首次点击从星火源下载安装 WorkBuddy，之后直接启动 AI 助手
+TryExec=/usr/bin/apt-get
+Exec=arlinux-popular-app workbuddy %U
+Icon=/usr/share/pixmaps/arlinux-workbuddy.png
+Terminal=true
+Categories=Development;Office;
+StartupWMClass=WorkBuddy
+StartupNotify=false

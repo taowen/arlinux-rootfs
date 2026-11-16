@@ -8,5 +8,5 @@ Exec=arlinux-popular-app workbuddy %U
 Icon=/usr/share/pixmaps/arlinux-workbuddy.png
 Terminal=true
 Categories=Development;Office;
-StartupWMClass=WorkBuddy
+StartupWMClass=workbuddy
 StartupNotify=false

@@ -221,6 +221,8 @@ first-use installation, download cache and agent environment; no store UI or
 APM container is launched. Its bundled icon comes from Spark's WorkBuddy catalog
 (`https://cdn.d.store.deepinos.org.cn/store/office/workbuddy/icon.png`);
 Tencent retains ownership of the application and icon. Vendor agreements apply.
+The launchers register declared URI schemes only when no handler is configured;
+WeChat handles `weixin://` through its native Linux client, preserving user defaults.
 
 The bundled QQ and WeChat icons come from those official packages. Tencent owns
 the applications and icons; their vendor licenses and first-run agreements apply.

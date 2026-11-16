@@ -10,6 +10,8 @@ import shutil
 import subprocess
 import sys
 
+from gi.repository import Gio
+
 import desktop_bus
 import agent_context
 import shared
@@ -108,6 +110,13 @@ def main() -> None:
             entry.write(output, space_around_delimiters=False)
     except FileExistsError:
         pass
+    # Guest Tools entries can precede the distribution's MIME cache refresh.
+    # Register their supported schemes only when the user has no handler yet.
+    handler = Gio.DesktopAppInfo.new(f'arlinux-{args.application}.desktop')
+    if handler is not None:
+        for mime in handler.get_supported_types() or ():
+            if Gio.AppInfo.get_default_for_type(mime, False) is None:
+                handler.set_as_default_for_type(mime)
     env = (agent_context.environment(os.environ) if app.agent
            else desktop_bus.environment(os.environ))
     env.update(app.environment)

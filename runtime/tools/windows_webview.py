@@ -132,7 +132,8 @@ def prepare(root, prefix, environment):
                               ('BrowserExecutableFolder', folder)):
             windows.run(root, prefix, 'reg.exe', ['add',
                 'HKLM\\Software\\Policies\\Microsoft\\Edge\\WebView2\\' + policy,
-                '/v', '*', '/t', 'REG_SZ', '/d', value, '/f', view], check=True, timeout=120)
+                '/v', '*', '/t', 'REG_SZ', '/d', value, '/f', view],
+                check=True, capture=True, timeout=120)
     env['WEBVIEW2_BROWSER_EXECUTABLE_FOLDER'] = folder
     env['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = WEBVIEW_FLAGS
     return env

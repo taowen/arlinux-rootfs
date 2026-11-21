@@ -288,8 +288,8 @@ def launch_world_of_warcraft():
             if launcher is None:
                 raise RuntimeError('Battle.net setup did not finish')
     # Battle.net chooses whether the installed game can start or needs setup.
-    return windows.run(root, prefix, launcher, ['battlenet://WoW', '--exec=launch WoW'],
-                       timeout=None, task=True).returncode
+    windows.request(root, prefix, launcher, ['battlenet://WoW', '--exec=launch WoW'])
+    return 0
 
 
 def prepare(app, accepted=False):

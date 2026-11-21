@@ -179,6 +179,11 @@ merged. Vendor bottle registries, Linux Wine DLL patches, dynamic launch scripts
 and packages requiring a vendor setup program are not supported. Static DLL
 overrides apply only to that application's launch.
 
+The World of Warcraft entry in Windows Apps downloads and verifies the
+versioned Blizzard Battle.net installer when the client is missing. It uses the
+instance Wine prefix and opens the retail World of Warcraft page in Battle.net.
+Battle.net handles sign-in, editions, installation, updates, and gameplay launch.
+
 Guest Tools provides QQ, WeChat and Grok Bot (from Cursor's Bot download page)
 entries for ARM64 Debian-family guests.
 First launch downloads the official DEB mirrored in the fixed

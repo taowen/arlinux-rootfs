@@ -250,6 +250,48 @@ def install_fontforge(root, prefix):
     return executable
 
 
+def battle_net_launcher(root, prefix):
+    default = prefix / 'pfx/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe'
+    if default.is_file():
+        return default
+    # Battle.net registers this handler even when installed outside Program Files.
+    result = windows.run(root, prefix, 'reg.exe',
+                         ['query', r'HKCR\battlenet\shell\open\command', '/ve'],
+                         capture=True, timeout=15)
+    match = re.search(r'REG_SZ\s+"([^"\r\n]+\\Battle\.net\.exe)"',
+                      result.stdout, re.IGNORECASE)
+    if result.returncode or not match:
+        return None
+    path = windows.run(root, prefix, 'winepath.exe', ['-u', match[1]],
+                       capture=True, timeout=15)
+    location = path.stdout.strip()
+    if path.returncode or not location.startswith('/') or '\n' in location:
+        return None
+    executable = windows.guest_path(location)
+    launcher = executable.with_name('Battle.net Launcher.exe')
+    if launcher.is_file():
+        return launcher
+    return executable if executable.is_file() else None
+
+
+def launch_world_of_warcraft():
+    prefix = windows.instance_prefix()
+    root = windows.ensure_runtime()
+    windows.initialize(root, prefix, windows.environment(root, prefix))
+    with shared.locked(prefix / 'battle-net-install.lock'):
+        launcher = battle_net_launcher(root, prefix)
+        if launcher is None:
+            print('Downloading the official Battle.net installer…', flush=True)
+            # Wait for Setup itself. Its spawned client can stay open after installation.
+            windows.run(root, prefix, download('battlenet'), timeout=3600, check=True)
+            launcher = battle_net_launcher(root, prefix)
+            if launcher is None:
+                raise RuntimeError('Battle.net setup did not finish')
+    # Battle.net chooses whether the installed game can start or needs setup.
+    return windows.run(root, prefix, launcher, ['battlenet://WoW', '--exec=launch WoW'],
+                       timeout=None, task=True).returncode
+
+
 def prepare(app, accepted=False):
     home = windows.storage() / 'apps' / app
     home.mkdir(parents=True, exist_ok=True)
@@ -304,10 +346,12 @@ def prepare(app, accepted=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('app', choices=LICENSES)
+    parser.add_argument('app', choices=(*LICENSES, 'wow'))
     parser.add_argument('--desktop', action='store_true')
     parser.add_argument('--accept-license', action='store_true', help='Explicit consent for unattended installation')
     args = parser.parse_args()
+    if args.app == 'wow':
+        return launch_world_of_warcraft()
     executable, prefix, cache = prepare(args.app, args.accept_license)
     root = windows.ensure_runtime()
     env = windows.environment(root, prefix)

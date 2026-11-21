@@ -122,14 +122,19 @@ own adapter only describes its integration-specific behavior. Other assistants
 can read `/usr/lib/arlinux/guest/agent-AGENTS.md` and the Python API source under
 `/usr/lib/arlinux/python/arlinux/` from their authorized local shell, then run
 `python3` directly. Assistant launchers supply the desktop session environment
-and `PYTHONPATH`. Grok Bot inherits that same environment and
-installs native ADB on first use. Its private skills are managed through its
-supported conversation/skill UI: ask it to read the local instructions and save
-the ARLinux workflow as a private skill. Do not patch its client, edit its private
+and `PYTHONPATH`. Grok Bot and WorkBuddy inherit that same environment and
+install native ADB on first use. WorkBuddy's launcher registers a local skill
+that points to the shared guide. For a personal WorkBuddy account without a saved
+permission mode, the launcher sets Full Access once account storage exists. This
+can take effect on the first relaunch after sign-in. An existing permission
+decision is preserved. The launcher selects WorkBuddy's Bubblewrap backend to
+use the guest's existing Bubblewrap compatibility layer. To set up Grok Bot,
+ask it to read the local instructions and save them as a private skill through
+its supported skill interface. Do not patch its client, edit its private
 databases, bypass local command approval or expose the host socket over TCP.
 `phone.open_desktop(serial)` returns to ARLinux after verified ADB setup; restore
-the requesting assistant with its saved Tasks window ID. OpenCode and Grok Bot
-use this same flow, independent of the assistant currently selected in Settings.
+the requesting assistant with its saved Tasks window ID. OpenCode, Grok Bot and
+WorkBuddy use this flow regardless of the assistant selected in Settings.
 First-use OpenCode installation also installs native ADB from the distribution
 repository (`adb` on Debian, `android-tools` on Arch). Later launches reuse the
 installed tools without refreshing package databases. Device debugging,

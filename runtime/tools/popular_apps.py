@@ -15,6 +15,7 @@ from gi.repository import Gio
 import desktop_bus
 import agent_context
 import shared
+import workbuddy_setup
 
 DOWNLOAD = 'https://github.com/taowen/arlinux-rootfs/releases/download/popular-apps/'
 
@@ -35,7 +36,10 @@ APPS = {
     'workbuddy': Application('workbuddy', '/opt/WorkBuddy/workbuddy', 'workbuddy.desktop',
                             flags=('--force-renderer-accessibility', '--ozone-platform=x11'),
                             dependencies=('adb',), agent=True,
-                            environment={'ARLINUX_BROWSER_HANDLER': '/usr/lib/arlinux/workbuddy_browser.py'},
+                            environment={
+                                'ARLINUX_BROWSER_HANDLER': '/usr/lib/arlinux/workbuddy_browser.py',
+                                'WB_SANDBOX_BACKEND': 'bwrap',
+                            },
                             installer=('https://mirrors.sdu.edu.cn/spark-store/arm64-store/office/workbuddy/'
                                        'workbuddy_5.6.2.40046327_arm64.deb',
                                        '561822578435d382a06d0a0b079a4b157f68b588c9fe72d589e2a88b2fd155fa')),
@@ -97,6 +101,8 @@ def main() -> None:
             install(args.application, app)
             if not installed(app):
                 raise RuntimeError('Application installation did not complete')
+        if args.application == 'workbuddy':
+            workbuddy_setup.prepare()
     # Hide the duplicate menu entry, but retain the vendor's URL handlers for
     # browser sign-in callbacks. Preserve any existing user override.
     applications = Path(os.environ.get('XDG_DATA_HOME', Path.home()/'.local/share'))/'applications'
